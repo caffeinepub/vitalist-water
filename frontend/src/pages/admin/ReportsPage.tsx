@@ -1,11 +1,15 @@
 import React, { useMemo } from 'react';
 import { useAllOrders, useAllStores } from '../../hooks/useQueries';
+import { useAuth } from '../../contexts/AuthContext';
 import { BarChart3, TrendingUp, Package, CheckCircle, Clock, Truck } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function ReportsPage() {
-  const { data: orders = [], isLoading } = useAllOrders();
-  const { data: stores = [] } = useAllStores();
+  const { user } = useAuth();
+  const sessionEmail = user?.email ?? '';
+
+  const { data: orders = [], isLoading } = useAllOrders(sessionEmail);
+  const { data: stores = [] } = useAllStores(sessionEmail);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -76,7 +80,7 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6 animate-slide-up">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Reports & Analytics</h1>
+        <h1 className="text-2xl font-bold text-foreground">Reports &amp; Analytics</h1>
         <p className="text-muted-foreground text-sm mt-1">Overview of order activity and delivery performance</p>
       </div>
 

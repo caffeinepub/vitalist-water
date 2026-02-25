@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 import { useAllStores, useAddStore, useUpdateStore, useDeleteStore } from '../../hooks/useQueries';
-import { useActor } from '../../hooks/useActor';
-import { Store } from '../../backend';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog,
   DialogContent,
@@ -23,223 +23,229 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Pencil, Trash2, Search, Loader2, MapPin, Navigation } from 'lucide-react';
-import { toast } from 'sonner';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { AlertCircle, Loader2, Plus, Pencil, Trash2, MapPin } from 'lucide-react';
+import type { Store } from '../../backend';
 
-const emptyStore = (): Omit<Store, 'timestamp'> => ({
+const SatelliteMapView = lazy(() => import('../../components/map/SatelliteMapView'));
+
+interface StoreForm {
+  storeName: string;
+  ownerName: string;
+  mobileNumber: string;
+  address: string;
+  landmark: string;
+  latitude: string;
+  longitude: string;
+}
+
+const emptyForm: StoreForm = {
   storeName: '',
   ownerName: '',
   mobileNumber: '',
   address: '',
   landmark: '',
-  latitude: 0,
-  longitude: 0,
-});
+  latitude: '',
+  longitude: '',
+};
 
 export default function StoreManagementPage() {
-  const { actor, isFetching: actorFetching } = useActor();
-  const { data: stores = [], isLoading } = useAllStores();
+  const { user } = useAuth();
+  const email = user?.email ?? '';
+
+  const { data: stores = [], isLoading, error } = useAllStores(email);
   const addStoreMutation = useAddStore();
   const updateStoreMutation = useUpdateStore();
   const deleteStoreMutation = useDeleteStore();
 
-  const actorReady = !!actor && !actorFetching;
-
-  const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingId, setEditingId] = useState<bigint | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<bigint | null>(null);
-  const [form, setForm] = useState(emptyStore());
+  const [editingStore, setEditingStore] = useState<{ store: Store; index: number } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
+  const [form, setForm] = useState<StoreForm>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
-  const [isLocating, setIsLocating] = useState(false);
-  const [locationError, setLocationError] = useState<string | null>(null);
-
-  const filteredStores = stores.filter(
-    (s) =>
-      s.storeName.toLowerCase().includes(search.toLowerCase()) ||
-      s.ownerName.toLowerCase().includes(search.toLowerCase()) ||
-      s.address.toLowerCase().includes(search.toLowerCase())
-  );
+  const [formError, setFormError] = useState('');
 
   const openAdd = () => {
-    setEditingId(null);
-    setForm(emptyStore());
-    setLocationError(null);
+    setEditingStore(null);
+    setForm(emptyForm);
+    setFormError('');
     setDialogOpen(true);
   };
 
-  const openEdit = (store: Store, idx: number) => {
-    setEditingId(BigInt(idx + 1));
+  const openEdit = (store: Store, index: number) => {
+    setEditingStore({ store, index });
     setForm({
       storeName: store.storeName,
       ownerName: store.ownerName,
       mobileNumber: store.mobileNumber,
       address: store.address,
       landmark: store.landmark,
-      latitude: store.latitude,
-      longitude: store.longitude,
+      latitude: String(store.latitude),
+      longitude: String(store.longitude),
     });
-    setLocationError(null);
+    setFormError('');
     setDialogOpen(true);
   };
 
-  const handleUseCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      setLocationError('Geolocation is not supported by your browser.');
-      return;
-    }
-    setIsLocating(true);
-    setLocationError(null);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        setForm((f) => ({ ...f, latitude, longitude }));
-        setIsLocating(false);
-        toast.success(`Location detected: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
-      },
-      (error) => {
-        setIsLocating(false);
-        let msg = 'Unable to retrieve your location.';
-        if (error.code === error.PERMISSION_DENIED) {
-          msg = 'Location permission denied. Please allow location access in your browser settings.';
-        } else if (error.code === error.POSITION_UNAVAILABLE) {
-          msg = 'Location information is unavailable. Please try again.';
-        } else if (error.code === error.TIMEOUT) {
-          msg = 'Location request timed out. Please try again.';
-        }
-        setLocationError(msg);
-        toast.error(msg);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
+  const handleMapClick = (lat: number, lng: number) => {
+    setForm((f) => ({ ...f, latitude: lat.toFixed(6), longitude: lng.toFixed(6) }));
   };
 
   const handleSubmit = async () => {
     if (!form.storeName.trim() || !form.ownerName.trim()) {
-      toast.error('Store name and owner name are required');
+      setFormError('Store name and owner name are required.');
+      return;
+    }
+    const lat = parseFloat(form.latitude);
+    const lng = parseFloat(form.longitude);
+    if (isNaN(lat) || isNaN(lng)) {
+      setFormError('Please select a valid location on the map or enter coordinates.');
       return;
     }
     setSubmitting(true);
+    setFormError('');
     try {
       const storeData: Store = {
-        ...form,
-        timestamp: BigInt(Date.now()),
+        storeName: form.storeName.trim(),
+        ownerName: form.ownerName.trim(),
+        mobileNumber: form.mobileNumber.trim(),
+        address: form.address.trim(),
+        landmark: form.landmark.trim(),
+        latitude: lat,
+        longitude: lng,
+        timestamp: BigInt(Date.now()) * BigInt(1_000_000),
       };
-      if (editingId !== null) {
-        await updateStoreMutation.mutateAsync({ id: editingId, store: storeData });
-        toast.success('Store updated successfully');
+      if (editingStore) {
+        await updateStoreMutation.mutateAsync({
+          id: BigInt(editingStore.index + 1),
+          store: storeData,
+          sessionEmail: email,
+        });
       } else {
-        await addStoreMutation.mutateAsync(storeData);
-        toast.success('Store added successfully');
+        await addStoreMutation.mutateAsync({ store: storeData, sessionEmail: email });
       }
       setDialogOpen(false);
     } catch (err: any) {
-      const msg = err?.message ?? String(err);
-      if (msg.includes('Unauthorized') || msg.includes('permission')) {
-        toast.error('Permission denied. Please log out and log back in.');
-      } else {
-        toast.error(`Failed to save store: ${msg}`);
-      }
+      setFormError(err?.message || 'Failed to save store.');
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async () => {
-    if (deleteConfirmId === null) return;
+    if (deleteTarget === null) return;
     try {
-      await deleteStoreMutation.mutateAsync(deleteConfirmId);
-      toast.success('Store deleted successfully');
-    } catch (err: any) {
-      toast.error(`Failed to delete store: ${err?.message ?? err}`);
+      await deleteStoreMutation.mutateAsync({
+        id: BigInt(deleteTarget + 1),
+        sessionEmail: email,
+      });
+    } catch (err) {
+      console.error('Delete store error:', err);
     } finally {
-      setDeleteConfirmId(null);
+      setDeleteTarget(null);
     }
   };
 
-  return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Store Management</h1>
-          <p className="text-muted-foreground text-sm mt-1">Manage all registered stores</p>
+  const mapCenter: [number, number] =
+    form.latitude && form.longitude
+      ? [parseFloat(form.latitude) || 20.5937, parseFloat(form.longitude) || 78.9629]
+      : [20.5937, 78.9629];
+
+  const mapMarkers =
+    form.latitude && form.longitude && !isNaN(parseFloat(form.latitude))
+      ? [{ lat: parseFloat(form.latitude), lng: parseFloat(form.longitude), label: 'Store Location' }]
+      : [];
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="flex items-center gap-2 text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+          <AlertCircle className="h-5 w-5 shrink-0" />
+          <p>Failed to load stores. Please try again.</p>
         </div>
-        <Button onClick={openAdd} disabled={!actorReady} className="gap-2">
-          {actorFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-foreground">Store Management</h1>
+        <Button onClick={openAdd}>
+          <Plus className="h-4 w-4 mr-2" />
           Add Store
         </Button>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Search stores..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-        />
-      </div>
-
-      <Card className="card-shadow">
-        <CardHeader>
-          <CardTitle className="text-base">Stores ({filteredStores.length})</CardTitle>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">
+            Stores{' '}
+            <span className="text-muted-foreground font-normal text-sm">
+              ({stores.length})
+            </span>
+          </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {isLoading || actorFetching ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          {isLoading ? (
+            <div className="p-4 space-y-2">
+              {[...Array(3)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
             </div>
-          ) : filteredStores.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <MapPin className="w-8 h-8 mx-auto mb-2 opacity-40" />
-              No stores found
+          ) : stores.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground">
+              <p className="text-sm">No stores yet. Add your first store.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>#</TableHead>
                     <TableHead>Store Name</TableHead>
                     <TableHead>Owner</TableHead>
                     <TableHead>Mobile</TableHead>
                     <TableHead>Address</TableHead>
-                    <TableHead>Coordinates</TableHead>
+                    <TableHead>Location</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredStores.map((store, idx) => (
+                  {stores.map((store, idx) => (
                     <TableRow key={idx}>
-                      <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
                       <TableCell className="font-medium">{store.storeName}</TableCell>
                       <TableCell>{store.ownerName}</TableCell>
                       <TableCell>{store.mobileNumber}</TableCell>
-                      <TableCell className="max-w-xs truncate">{store.address}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {store.latitude !== 0 || store.longitude !== 0
-                          ? `${store.latitude.toFixed(4)}, ${store.longitude.toFixed(4)}`
-                          : '—'}
+                      <TableCell className="text-sm text-muted-foreground max-w-xs truncate">
+                        {store.address}
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-2">
+                        <span className="text-xs text-muted-foreground font-mono">
+                          {store.latitude.toFixed(4)}, {store.longitude.toFixed(4)}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
                           <Button
-                            size="icon"
-                            variant="ghost"
+                            size="sm"
+                            variant="outline"
                             onClick={() => openEdit(store, idx)}
-                            disabled={!actorReady}
                           >
-                            <Pencil className="w-4 h-4" />
+                            <Pencil className="h-3 w-3" />
                           </Button>
                           <Button
-                            size="icon"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => setDeleteConfirmId(BigInt(idx + 1))}
-                            disabled={!actorReady}
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => setDeleteTarget(idx)}
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="h-3 w-3" />
                           </Button>
                         </div>
                       </TableCell>
@@ -253,110 +259,142 @@ export default function StoreManagementPage() {
       </Card>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setLocationError(null); }}>
-        <DialogContent className="max-w-lg">
+      <Dialog open={dialogOpen} onOpenChange={(o) => !submitting && setDialogOpen(o)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingId !== null ? 'Edit Store' : 'Add New Store'}</DialogTitle>
+            <DialogTitle>{editingStore ? 'Edit Store' : 'Add Store'}</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-2">
-            {[
-              { label: 'Store Name *', key: 'storeName', type: 'text' },
-              { label: 'Owner Name *', key: 'ownerName', type: 'text' },
-              { label: 'Mobile Number', key: 'mobileNumber', type: 'tel' },
-              { label: 'Address', key: 'address', type: 'text' },
-              { label: 'Landmark', key: 'landmark', type: 'text' },
-            ].map(({ label, key, type }) => (
-              <div key={key} className="grid gap-1.5">
-                <Label>{label}</Label>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Store Name *</Label>
                 <Input
-                  type={type}
-                  value={String((form as any)[key])}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, [key]: e.target.value }))
-                  }
+                  value={form.storeName}
+                  onChange={(e) => setForm((f) => ({ ...f, storeName: e.target.value }))}
+                  placeholder="Store name"
                 />
               </div>
-            ))}
-
-            {/* Location section */}
-            <div className="grid gap-1.5">
-              <div className="flex items-center justify-between">
-                <Label>Location Coordinates</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleUseCurrentLocation}
-                  disabled={isLocating || submitting}
-                  className="gap-1.5 text-xs h-7"
-                >
-                  {isLocating ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <Navigation className="w-3 h-3" />
-                  )}
-                  {isLocating ? 'Detecting…' : 'Use Current Location'}
-                </Button>
+              <div className="space-y-1">
+                <Label>Owner Name *</Label>
+                <Input
+                  value={form.ownerName}
+                  onChange={(e) => setForm((f) => ({ ...f, ownerName: e.target.value }))}
+                  placeholder="Owner name"
+                />
               </div>
-
-              {locationError && (
-                <div className="flex items-start gap-2 p-2.5 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-xs">
-                  <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                  <span>{locationError}</span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-1.5">
-                  <Label className="text-xs text-muted-foreground">Latitude</Label>
-                  <Input
-                    type="number"
-                    step="any"
-                    value={form.latitude === 0 ? '' : String(form.latitude)}
-                    placeholder="e.g. 12.9716"
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, latitude: parseFloat(e.target.value) || 0 }))
-                    }
-                  />
-                </div>
-                <div className="grid gap-1.5">
-                  <Label className="text-xs text-muted-foreground">Longitude</Label>
-                  <Input
-                    type="number"
-                    step="any"
-                    value={form.longitude === 0 ? '' : String(form.longitude)}
-                    placeholder="e.g. 77.5946"
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, longitude: parseFloat(e.target.value) || 0 }))
-                    }
-                  />
-                </div>
+              <div className="space-y-1">
+                <Label>Mobile Number</Label>
+                <Input
+                  value={form.mobileNumber}
+                  onChange={(e) => setForm((f) => ({ ...f, mobileNumber: e.target.value }))}
+                  placeholder="+91 XXXXX XXXXX"
+                />
               </div>
-
-              {(form.latitude !== 0 || form.longitude !== 0) && (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <MapPin className="w-3 h-3 text-primary" />
-                  <span>
-                    {form.latitude.toFixed(6)}, {form.longitude.toFixed(6)}
-                  </span>
-                </div>
-              )}
+              <div className="space-y-1">
+                <Label>Landmark</Label>
+                <Input
+                  value={form.landmark}
+                  onChange={(e) => setForm((f) => ({ ...f, landmark: e.target.value }))}
+                  placeholder="Nearby landmark"
+                />
+              </div>
             </div>
+            <div className="space-y-1">
+              <Label>Address</Label>
+              <Input
+                value={form.address}
+                onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                placeholder="Full address"
+              />
+            </div>
+
+            {/* Map picker */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1">
+                <MapPin className="h-3 w-3" />
+                Location (click map to set)
+              </Label>
+              <Suspense
+                fallback={
+                  <div className="h-48 bg-muted rounded-lg flex items-center justify-center">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                }
+              >
+                <SatelliteMapView
+                  center={mapCenter}
+                  zoom={mapMarkers.length > 0 ? 14 : 5}
+                  markers={mapMarkers}
+                  onClick={handleMapClick}
+                  height="220px"
+                />
+              </Suspense>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Latitude</Label>
+                  <Input
+                    value={form.latitude}
+                    onChange={(e) => setForm((f) => ({ ...f, latitude: e.target.value }))}
+                    placeholder="e.g. 12.9716"
+                    className="text-xs font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Longitude</Label>
+                  <Input
+                    value={form.longitude}
+                    onChange={(e) => setForm((f) => ({ ...f, longitude: e.target.value }))}
+                    placeholder="e.g. 77.5946"
+                    className="text-xs font-mono"
+                  />
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (!navigator.geolocation) return;
+                  navigator.geolocation.getCurrentPosition((pos) => {
+                    setForm((f) => ({
+                      ...f,
+                      latitude: pos.coords.latitude.toFixed(6),
+                      longitude: pos.coords.longitude.toFixed(6),
+                    }));
+                  });
+                }}
+              >
+                <MapPin className="h-3 w-3 mr-1" />
+                Use Current Location
+              </Button>
+            </div>
+
+            {formError && (
+              <p className="text-sm text-destructive">{formError}</p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={submitting}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit} disabled={submitting || isLocating}>
-              {submitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              {editingId !== null ? 'Update' : 'Add'} Store
+            <Button onClick={handleSubmit} disabled={submitting}>
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Saving…
+                </>
+              ) : editingStore ? (
+                'Update Store'
+              ) : (
+                'Add Store'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirm */}
-      <AlertDialog open={deleteConfirmId !== null} onOpenChange={(o) => !o && setDeleteConfirmId(null)}>
+      {/* Delete Confirmation */}
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Store</AlertDialogTitle>
@@ -366,9 +404,7 @@ export default function StoreManagementPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
-              Delete
-            </AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

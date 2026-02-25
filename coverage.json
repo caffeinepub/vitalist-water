@@ -1,64 +1,110 @@
 {
   "kind": "coverage_report",
   "version": "1.0",
-  "generatedAt": "2026-02-25T09:38:16.827Z",
+  "generatedAt": "2026-02-25T11:47:44.762Z",
   "sources": {
     "buildRequest": true,
     "implementationPlan": true
   },
   "requirements": {
     "total": 3,
-    "implemented": 2,
+    "implemented": 3,
     "items": [
       {
-        "id": "REQ-35",
-        "summary": "Fix the backend addUser function in main.mo so that when a new user is successfully created, a valid and unique user ID is generated and stored with the user record. The returned user object must include the assigned user ID. Ensure the ID is not empty, null, or undefined after creation.",
-        "status": "unknown",
-        "plannedFiles": [],
-        "matchedFiles": []
-      },
-      {
-        "id": "REQ-36",
-        "summary": "Fix the UserManagementPage.tsx user table so that after a new user is created, the user's ID is correctly displayed in the user list/table panel. The table must render the user ID column value for every user row, including newly created users.",
+        "id": "REQ-1",
+        "summary": "Diagnose and fix the blank page issue that occurs after deployment. Audit App.tsx for runtime errors including undefined variable access, failed imports, missing null guards on authentication state, and role-based routing logic that may throw before rendering. Ensure the app renders a visible UI for all authentication states (unauthenticated, loading, authenticated with any role).",
         "status": "implemented",
         "plannedFiles": [
+          "frontend/src/App.tsx",
+          "frontend/src/contexts/AuthContext.tsx",
+          "frontend/src/pages/LoginPage.tsx",
+          "frontend/src/pages/Dashboard.tsx",
+          "frontend/src/pages/admin/OrderManagementPage.tsx",
+          "frontend/src/pages/admin/StoreManagementPage.tsx",
           "frontend/src/pages/admin/UserManagementPage.tsx",
-          "frontend/src/hooks/useQueries.ts"
+          "frontend/src/pages/staff/OrderCreationPage.tsx",
+          "frontend/src/pages/delivery/DeliveryDashboard.tsx",
+          "frontend/src/pages/distributor/DistributorDashboard.tsx"
         ],
         "matchedFiles": [
+          "frontend/src/App.tsx",
+          "frontend/src/contexts/AuthContext.tsx",
+          "frontend/src/pages/LoginPage.tsx",
+          "frontend/src/pages/Dashboard.tsx",
+          "frontend/src/pages/admin/OrderManagementPage.tsx",
+          "frontend/src/pages/admin/StoreManagementPage.tsx",
           "frontend/src/pages/admin/UserManagementPage.tsx",
-          "frontend/src/hooks/useQueries.ts"
+          "frontend/src/pages/staff/OrderCreationPage.tsx",
+          "frontend/src/pages/distributor/DistributorDashboard.tsx"
         ]
       },
       {
-        "id": "REQ-37",
-        "summary": "Fix the login flow so that newly created users (added via the Admin's Add User form) can successfully log in with their assigned email and password. Audit the backend login function in main.mo to ensure it looks up users by email against the full users map (including dynamically added users, not just pre-seeded accounts), verifies the hashed password correctly, and returns a valid session token and role on success. Ensure AuthContext.tsx correctly processes the login response and stores the token and role in sessionStorage.",
+        "id": "REQ-2",
+        "summary": "Add a top-level error boundary component wrapping the entire React application in App.tsx to catch and display any unhandled render errors with a user-friendly fallback UI instead of a blank page. The fallback should show the app name and a message indicating an error occurred with a reload button.",
         "status": "implemented",
         "plannedFiles": [
-          "frontend/src/contexts/AuthContext.tsx",
-          "frontend/src/pages/LoginPage.tsx",
+          "frontend/src/components/ErrorBoundary.tsx",
           "frontend/src/App.tsx"
         ],
         "matchedFiles": [
-          "frontend/src/contexts/AuthContext.tsx"
+          "frontend/src/components/ErrorBoundary.tsx",
+          "frontend/src/App.tsx"
+        ]
+      },
+      {
+        "id": "REQ-3",
+        "summary": "Audit all lazy-loaded or dynamically imported components (maps, Leaflet, QR scanner, camera) for missing Suspense boundaries or import failures that could cause a blank render. Wrap all such components with React.Suspense and appropriate loading fallbacks.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/components/map/SatelliteMapView.tsx",
+          "frontend/src/components/qr/QRScanModal.tsx",
+          "frontend/src/components/distributor/BarcodeScanStep.tsx",
+          "frontend/src/pages/admin/LiveTrackingPage.tsx",
+          "frontend/src/pages/admin/StoreManagementPage.tsx",
+          "frontend/src/pages/admin/DeliveryVerificationPage.tsx",
+          "frontend/src/pages/delivery/DeliveryDashboard.tsx",
+          "frontend/src/pages/staff/OrderCreationPage.tsx",
+          "frontend/src/pages/ScanPage.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/components/map/SatelliteMapView.tsx",
+          "frontend/src/components/qr/QRScanModal.tsx",
+          "frontend/src/components/distributor/BarcodeScanStep.tsx",
+          "frontend/src/pages/admin/StoreManagementPage.tsx",
+          "frontend/src/pages/staff/OrderCreationPage.tsx",
+          "frontend/src/pages/ScanPage.tsx"
         ]
       }
     ]
   },
   "changedFiles": [
-    "backend/main.mo",
-    "backend/migration.mo",
     "build-request.json",
     "feature_evidence.json",
     "frontend-file-summaries.txt",
     "frontend-implementation-plan.json",
-    "frontend/src/backend.d.ts",
-    "frontend/src/backend.ts",
+    "frontend/src/App.tsx",
+    "frontend/src/components/ErrorBoundary.tsx",
+    "frontend/src/components/distributor/BarcodeScanStep.tsx",
+    "frontend/src/components/distributor/DistributorWorkflowDialog.tsx",
+    "frontend/src/components/layout/AppSidebar.tsx",
+    "frontend/src/components/layout/Layout.tsx",
+    "frontend/src/components/map/SatelliteMapView.tsx",
+    "frontend/src/components/orders/InvoiceModal.tsx",
+    "frontend/src/components/qr/QRScanModal.tsx",
     "frontend/src/contexts/AuthContext.tsx",
-    "frontend/src/declarations/backend.did.d.ts",
-    "frontend/src/declarations/backend.did.js",
     "frontend/src/hooks/useQueries.ts",
+    "frontend/src/pages/Dashboard.tsx",
+    "frontend/src/pages/LoginPage.tsx",
+    "frontend/src/pages/ScanPage.tsx",
+    "frontend/src/pages/SettingsPage.tsx",
+    "frontend/src/pages/admin/DistributorDeliveryManagementPage.tsx",
+    "frontend/src/pages/admin/OrderManagementPage.tsx",
+    "frontend/src/pages/admin/QRManagementPage.tsx",
+    "frontend/src/pages/admin/ReportsPage.tsx",
+    "frontend/src/pages/admin/StoreManagementPage.tsx",
     "frontend/src/pages/admin/UserManagementPage.tsx",
+    "frontend/src/pages/distributor/DistributorDashboard.tsx",
+    "frontend/src/pages/staff/OrderCreationPage.tsx",
     "project_state.json",
     "scratch/component-selection.json",
     "spec.md",

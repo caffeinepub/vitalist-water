@@ -1,32 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ThemeProvider } from 'next-themes';
-import { Toaster } from '@/components/ui/sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import ErrorBoundary from './components/ErrorBoundary';
 import LoginPage from './pages/LoginPage';
-import Layout from './components/layout/Layout';
-
-// Admin pages
-import StoreManagementPage from './pages/admin/StoreManagementPage';
-import UserManagementPage from './pages/admin/UserManagementPage';
-import OrderManagementPage from './pages/admin/OrderManagementPage';
-import QRManagementPage from './pages/admin/QRManagementPage';
-import ReportsPage from './pages/admin/ReportsPage';
-import DistributorDeliveryManagementPage from './pages/admin/DistributorDeliveryManagementPage';
-
-// Staff pages
-import OrderCreationPage from './pages/staff/OrderCreationPage';
-import ScanPage from './pages/ScanPage';
-
-// Delivery pages
-import DeliveryDashboard from './pages/delivery/DeliveryDashboard';
-
-// Distributor pages
-import DistributorDashboard from './pages/distributor/DistributorDashboard';
-
-// Shared pages
-import SettingsPage from './pages/SettingsPage';
 import Dashboard from './pages/Dashboard';
+import { Loader2 } from 'lucide-react';
+
+// Lazy-load heavy pages
+const OrderManagementPage = React.lazy(() => import('./pages/admin/OrderManagementPage'));
+const StoreManagementPage = React.lazy(() => import('./pages/admin/StoreManagementPage'));
+const UserManagementPage = React.lazy(() => import('./pages/admin/UserManagementPage'));
+const ReportsPage = React.lazy(() => import('./pages/admin/ReportsPage'));
+const QRManagementPage = React.lazy(() => import('./pages/admin/QRManagementPage'));
+const LiveTrackingPage = React.lazy(() => import('./pages/admin/LiveTrackingPage'));
+const DeliveryVerificationPage = React.lazy(() => import('./pages/admin/DeliveryVerificationPage'));
+const DistributorDeliveryManagementPage = React.lazy(
+  () => import('./pages/admin/DistributorDeliveryManagementPage'),
+);
+const OrderCreationPage = React.lazy(() => import('./pages/staff/OrderCreationPage'));
+const DeliveryDashboard = React.lazy(() => import('./pages/delivery/DeliveryDashboard'));
+const DistributorDashboard = React.lazy(() => import('./pages/distributor/DistributorDashboard'));
+const ScanPage = React.lazy(() => import('./pages/ScanPage'));
+const SettingsPage = React.lazy(() => import('./pages/SettingsPage'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,100 +32,192 @@ const queryClient = new QueryClient({
   },
 });
 
-function AppContent() {
-  const { user, isSessionRestored } = useAuth();
-  const [currentPage, setCurrentPage] = useState<string>('');
-
-  // Set default page based on role when user changes
-  useEffect(() => {
-    if (user) {
-      if (user.role === 'admin') setCurrentPage('stores');
-      else if (user.role === 'staff') setCurrentPage('scan');
-      else if (user.role === 'delivery') setCurrentPage('delivery');
-      else if (user.role === 'distributor') setCurrentPage('distributor-dashboard');
-    }
-  }, [user?.role]);
-
-  if (!isSessionRestored) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-muted-foreground text-sm">Loading session…</p>
-        </div>
+function PageLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-muted-foreground text-sm">Loading…</p>
       </div>
-    );
+    </div>
+  );
+}
+
+type Page =
+  | 'dashboard'
+  | 'orders'
+  | 'stores'
+  | 'users'
+  | 'reports'
+  | 'qr'
+  | 'live-tracking'
+  | 'delivery-verification'
+  | 'distributor-deliveries'
+  | 'order-creation'
+  | 'delivery-dashboard'
+  | 'distributor-dashboard'
+  | 'scan'
+  | 'settings';
+
+function isPage(value: string): value is Page {
+  return [
+    'dashboard', 'orders', 'stores', 'users', 'reports', 'qr',
+    'live-tracking', 'delivery-verification', 'distributor-deliveries',
+    'order-creation', 'delivery-dashboard', 'distributor-dashboard',
+    'scan', 'settings',
+  ].includes(value);
+}
+
+function getDefaultPageForRole(role: string): Page {
+  switch (role) {
+    case 'admin': return 'dashboard';
+    case 'staff': return 'order-creation';
+    case 'delivery': return 'delivery-dashboard';
+    case 'distributor': return 'distributor-dashboard';
+    default: return 'dashboard';
+  }
+}
+
+function AppContent() {
+  const { user, isLoading, isAuthenticated } = useAuth();
+  const [currentPage, setCurrentPage] = React.useState<Page>('dashboard');
+
+  const role = user?.role ?? '';
+
+  // navigate accepts string (for Dashboard compatibility) but validates before setting
+  const navigate = (page: string) => {
+    if (isPage(page)) {
+      setCurrentPage(page);
+    }
+  };
+
+  // Redirect to role-appropriate default page — must be called unconditionally (before any early returns)
+  React.useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    if (currentPage === 'dashboard' && role !== 'admin') {
+      setCurrentPage(getDefaultPageForRole(role));
+    }
+  }, [role, isAuthenticated, user, currentPage]);
+
+  // Show loading while auth is initializing
+  if (isLoading) {
+    return <PageLoader />;
   }
 
-  if (!user) {
+  // Show login if not authenticated
+  if (!isAuthenticated || !user) {
     return <LoginPage />;
   }
 
   const renderPage = () => {
-    if (user.role === 'admin') {
-      switch (currentPage) {
-        case 'dashboard': return <Dashboard />;
-        case 'stores': return <StoreManagementPage />;
-        case 'orders': return <OrderManagementPage />;
-        case 'invoices': return <OrderManagementPage />;
-        case 'qr-management': return <QRManagementPage />;
-        case 'scan': return <ScanPage role="admin" />;
-        case 'reports': return <ReportsPage />;
-        case 'users': return <UserManagementPage />;
-        case 'distributor-deliveries': return <DistributorDeliveryManagementPage />;
-        case 'settings': return <SettingsPage />;
-        default: return <StoreManagementPage />;
-      }
+    const adminPages: Page[] = [
+      'orders', 'stores', 'users', 'reports', 'qr',
+      'live-tracking', 'delivery-verification', 'distributor-deliveries',
+    ];
+
+    if (role !== 'admin' && adminPages.includes(currentPage)) {
+      return <Dashboard onNavigate={navigate} />;
     }
 
-    if (user.role === 'staff') {
-      switch (currentPage) {
-        case 'dashboard': return <Dashboard />;
-        case 'orders': return <OrderManagementPage />;
-        case 'create-order': return <OrderCreationPage />;
-        case 'scan': return <ScanPage role="staff" />;
-        case 'settings': return <SettingsPage />;
-        default: return <ScanPage role="staff" />;
-      }
+    switch (currentPage) {
+      case 'dashboard':
+        return <Dashboard onNavigate={navigate} />;
+      case 'orders':
+        return role === 'admin' ? <OrderManagementPage /> : <Dashboard onNavigate={navigate} />;
+      case 'stores':
+        return role === 'admin' ? <StoreManagementPage /> : <Dashboard onNavigate={navigate} />;
+      case 'users':
+        return role === 'admin' ? <UserManagementPage /> : <Dashboard onNavigate={navigate} />;
+      case 'reports':
+        return role === 'admin' ? <ReportsPage /> : <Dashboard onNavigate={navigate} />;
+      case 'qr':
+        return role === 'admin' ? <QRManagementPage /> : <Dashboard onNavigate={navigate} />;
+      case 'live-tracking':
+        return role === 'admin' ? <LiveTrackingPage /> : <Dashboard onNavigate={navigate} />;
+      case 'delivery-verification':
+        return role === 'admin' ? (
+          <DeliveryVerificationPage />
+        ) : (
+          <Dashboard onNavigate={navigate} />
+        );
+      case 'distributor-deliveries':
+        return role === 'admin' ? (
+          <DistributorDeliveryManagementPage />
+        ) : (
+          <Dashboard onNavigate={navigate} />
+        );
+      case 'order-creation':
+        return role === 'staff' || role === 'admin' ? (
+          <OrderCreationPage />
+        ) : (
+          <Dashboard onNavigate={navigate} />
+        );
+      case 'delivery-dashboard':
+        return role === 'delivery' || role === 'admin' ? (
+          <DeliveryDashboard />
+        ) : (
+          <Dashboard onNavigate={navigate} />
+        );
+      case 'distributor-dashboard':
+        return role === 'distributor' || role === 'admin' ? (
+          <DistributorDashboard />
+        ) : (
+          <Dashboard onNavigate={navigate} />
+        );
+      case 'scan':
+        return role === 'admin' || role === 'staff' || role === 'delivery' ? (
+          <ScanPage role={role as 'admin' | 'staff' | 'delivery'} />
+        ) : (
+          <Dashboard onNavigate={navigate} />
+        );
+      case 'settings':
+        return <SettingsPage />;
+      default:
+        return <Dashboard onNavigate={navigate} />;
     }
-
-    if (user.role === 'delivery') {
-      switch (currentPage) {
-        case 'dashboard': return <Dashboard />;
-        case 'delivery': return <DeliveryDashboard />;
-        case 'delivery-scan': return <ScanPage role="delivery" />;
-        case 'settings': return <SettingsPage />;
-        default: return <DeliveryDashboard />;
-      }
-    }
-
-    if (user.role === 'distributor') {
-      switch (currentPage) {
-        case 'distributor-dashboard': return <DistributorDashboard />;
-        case 'settings': return <SettingsPage />;
-        default: return <DistributorDashboard />;
-      }
-    }
-
-    return null;
   };
 
   return (
-    <Layout currentPage={currentPage} onNavigate={setCurrentPage}>
-      {renderPage()}
-    </Layout>
+    <div className="flex min-h-screen bg-background">
+      <AppSidebarWrapper role={role} currentPage={currentPage} onNavigate={navigate} />
+      <main className="flex-1 overflow-auto">
+        <ErrorBoundary>
+          <Suspense fallback={<PageLoader />}>{renderPage()}</Suspense>
+        </ErrorBoundary>
+      </main>
+    </div>
+  );
+}
+
+// Lazy-load sidebar
+const AppSidebar = React.lazy(() => import('./components/layout/AppSidebar'));
+
+function AppSidebarWrapper({
+  role,
+  currentPage,
+  onNavigate,
+}: {
+  role: string;
+  currentPage: Page;
+  onNavigate: (page: string) => void;
+}) {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<div className="w-64 bg-sidebar shrink-0" />}>
+        <AppSidebar role={role} currentPage={currentPage} onNavigate={onNavigate} />
+      </Suspense>
+    </ErrorBoundary>
   );
 }
 
 export default function App() {
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+    <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <AppContent />
-          <Toaster richColors position="top-right" />
         </AuthProvider>
       </QueryClientProvider>
-    </ThemeProvider>
+    </ErrorBoundary>
   );
 }

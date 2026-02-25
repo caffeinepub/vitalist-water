@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useAllOrders, useUpdateOrder } from '../hooks/useQueries';
+import { useAuth } from '../contexts/AuthContext';
 import { OrderRecord } from '../backend';
 import { Button } from '@/components/ui/button';
 import StatusBadge from '../components/orders/StatusBadge';
 import QRScanModal from '../components/qr/QRScanModal';
-import { ScanLine, CheckCircle, AlertCircle, Package, Loader2, MapPin } from 'lucide-react';
+import { ScanLine, CheckCircle, AlertCircle, Package, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { parseOrderMeta, buildNotesWithMeta } from '../utils/orderUtils';
 import { getCurrentPosition } from '../utils/geoUtils';
@@ -51,7 +52,10 @@ const STAGE_CONFIG = {
 
 export default function ScanPage({ role }: ScanPageProps) {
   const config = STAGE_CONFIG[role];
-  const { data: orders = [] } = useAllOrders();
+  const { user } = useAuth();
+  const sessionEmail = user?.email ?? '';
+
+  const { data: orders = [] } = useAllOrders(sessionEmail);
   const updateOrder = useUpdateOrder();
 
   const [scanModalOpen, setScanModalOpen] = useState(false);
@@ -90,11 +94,12 @@ export default function ScanPage({ role }: ScanPageProps) {
           };
           await updateOrder.mutateAsync({
             orderId,
-            order: {
+            updatedOrder: {
               ...order,
               status: 'Out for Delivery',
               notes: buildNotesWithMeta(userNotes, updatedMeta),
             },
+            sessionEmail,
           });
           setLastResult({ success: true, message: `Order ${orderId} → Out for Delivery`, orderId });
           toast.success(`Order ${orderId} marked as Out for Delivery`);
@@ -115,11 +120,12 @@ export default function ScanPage({ role }: ScanPageProps) {
           };
           await updateOrder.mutateAsync({
             orderId,
-            order: {
+            updatedOrder: {
               ...order,
               status: 'Delivered',
               notes: buildNotesWithMeta(userNotes, updatedMeta),
             },
+            sessionEmail,
           });
           setLastResult({ success: true, message: `Order ${orderId} → Delivered ✓`, orderId });
           toast.success(`Order ${orderId} marked as Delivered`);
@@ -155,16 +161,22 @@ export default function ScanPage({ role }: ScanPageProps) {
       const updatedMeta = {
         ...meta,
         [config.metaKey]: Date.now(),
-        ...(config.requiresGPS ? { [`${config.metaKey.replace('Timestamp', 'Lat')}`]: lat, [`${config.metaKey.replace('Timestamp', 'Lng')}`]: lng } : {}),
+        ...(config.requiresGPS
+          ? {
+              [`${config.metaKey.replace('Timestamp', 'Lat')}`]: lat,
+              [`${config.metaKey.replace('Timestamp', 'Lng')}`]: lng,
+            }
+          : {}),
       };
 
       await updateOrder.mutateAsync({
         orderId,
-        order: {
+        updatedOrder: {
           ...order,
           status: config.toStatus,
           notes: buildNotesWithMeta(userNotes, updatedMeta),
         },
+        sessionEmail,
       });
 
       setLastResult({ success: true, message: `Order ${orderId} → ${config.toStatus}`, orderId });

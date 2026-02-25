@@ -1,75 +1,74 @@
 {
   "kind": "build_request",
-  "title": "Fix newly added users: missing user ID display in panel and login failure",
-  "projectName": "Vitalist Water",
+  "title": "Fix blank page crash after deployment",
   "priority": "high",
   "requirements": [
     {
-      "id": "REQ-35",
-      "text": "Fix the backend addUser function in main.mo so that when a new user is successfully created, a valid and unique user ID is generated and stored with the user record. The returned user object must include the assigned user ID. Ensure the ID is not empty, null, or undefined after creation.",
-      "target": "backend",
-      "source": {
-        "messageIds": [
-          "msg-1"
-        ],
-        "quotes": [
-          "after the user will be added the user id is not showing"
-        ]
-      },
-      "acceptanceCriteria": [
-        "When admin creates a new user via addUser, the backend assigns and persists a non-empty unique user ID to the record.",
-        "The addUser function returns the newly created user record including the generated user ID.",
-        "No user record exists in the backend store with a missing or empty ID after creation."
-      ]
-    },
-    {
-      "id": "REQ-36",
-      "text": "Fix the UserManagementPage.tsx user table so that after a new user is created, the user's ID is correctly displayed in the user list/table panel. The table must render the user ID column value for every user row, including newly created users.",
+      "id": "REQ-1",
+      "text": "Diagnose and fix the blank page issue that occurs after deployment. Audit App.tsx for runtime errors including undefined variable access, failed imports, missing null guards on authentication state, and role-based routing logic that may throw before rendering. Ensure the app renders a visible UI for all authentication states (unauthenticated, loading, authenticated with any role).",
       "target": "frontend",
       "source": {
         "messageIds": [
           "msg-1"
         ],
         "quotes": [
-          "after the user will be added the user id is not showing panela"
+          "The page is gone blank of this"
         ]
       },
       "acceptanceCriteria": [
-        "After successfully adding a user, the user table refreshes and shows the new user's ID in the ID column.",
-        "No user row in the table displays a blank, undefined, or missing ID value.",
-        "The user list re-fetches (React Query invalidation) immediately after a successful addUser mutation so the new record appears without a manual page reload."
+        "The app loads and displays the login page or dashboard without going blank after a fresh deployment",
+        "No unhandled JavaScript exceptions are thrown during initial render",
+        "All role-based routes (admin, staff, delivery, distributor) render without blank screens",
+        "Unauthenticated users see the login page instead of a blank screen",
+        "The app recovers gracefully if backend actor initialization is slow or fails"
       ]
     },
     {
-      "id": "REQ-37",
-      "text": "Fix the login flow so that newly created users (added via the Admin's Add User form) can successfully log in with their assigned email and password. Audit the backend login function in main.mo to ensure it looks up users by email against the full users map (including dynamically added users, not just pre-seeded accounts), verifies the hashed password correctly, and returns a valid session token and role on success. Ensure AuthContext.tsx correctly processes the login response and stores the token and role in sessionStorage.",
-      "target": "both",
+      "id": "REQ-2",
+      "text": "Add a top-level error boundary component wrapping the entire React application in App.tsx to catch and display any unhandled render errors with a user-friendly fallback UI instead of a blank page. The fallback should show the app name and a message indicating an error occurred with a reload button.",
+      "target": "frontend",
       "source": {
         "messageIds": [
           "msg-1"
         ],
         "quotes": [
-          "they cant login"
+          "The page is gone blank of this"
         ]
       },
       "acceptanceCriteria": [
-        "A user created via the Add User form can log in immediately after creation using the email and password provided during creation.",
-        "The backend login function finds dynamically added users by email (not only pre-seeded users).",
-        "On successful login, a session token and the user's role are returned and stored in sessionStorage by AuthContext.tsx.",
-        "After login, the newly created user is routed to the page appropriate for their role (Staff → Order Creation, Delivery → Delivery Dashboard, Distributor → Distributor Dashboard, Admin → Dashboard).",
-        "No 'invalid credentials' or 'user not found' error is shown for a valid newly created account."
+        "A React ErrorBoundary component wraps the top-level app content",
+        "When a render error is caught, a fallback UI is displayed instead of a blank page",
+        "The fallback UI includes a reload/retry button",
+        "The error boundary does not interfere with normal app rendering"
+      ]
+    },
+    {
+      "id": "REQ-3",
+      "text": "Audit all lazy-loaded or dynamically imported components (maps, Leaflet, QR scanner, camera) for missing Suspense boundaries or import failures that could cause a blank render. Wrap all such components with React.Suspense and appropriate loading fallbacks.",
+      "target": "frontend",
+      "source": {
+        "messageIds": [
+          "msg-1"
+        ],
+        "quotes": [
+          "The page is gone blank of this"
+        ]
+      },
+      "acceptanceCriteria": [
+        "All dynamically imported components (SatelliteMapView, QRScanModal, BarcodeScanStep) have Suspense boundaries with loading indicators",
+        "A failure to load a dynamic component does not blank out the entire page",
+        "Loading states are visible while async components initialize"
       ]
     }
   ],
   "constraints": [
-    "Do not change the existing pre-seeded demo accounts (admin@vitalist.com, staff@vitalist.com, delivery@vitalist.com, shajan@vitalist.com).",
-    "Do not break the existing session-based auth pattern — token/email/role stored in sessionStorage must remain the auth mechanism.",
-    "Frontend immutable paths (useInternetIdentity.ts, useActor.ts, main.tsx, components/ui) must not be modified."
+    "Do not modify files under frontend/src/hooks/useInternetIdentity.ts, frontend/src/hooks/useActor.ts, frontend/src/main.tsx, or frontend/src/components/ui",
+    "Do not change the backend schema or data model"
   ],
   "nonGoals": [
-    "Changing the password hashing algorithm or auth mechanism.",
-    "Adding new user roles beyond the existing four (Admin, Staff, Delivery, Distributor).",
-    "Modifying the QR workflow, order creation flow, or store management."
+    "Adding new features or pages",
+    "Changing the visual design or color theme",
+    "Modifying backend logic"
   ],
   "imageRequirements": {
     "required": [],

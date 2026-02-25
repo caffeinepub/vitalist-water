@@ -1,10 +1,18 @@
-import React, { useState } from 'react';
-import { useAllStores, useCreateOrder } from '../../hooks/useQueries';
+import React, { useState, Suspense } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import {
+  useAllOrders,
+  useAllStores,
+  useCreateOrder,
+  useUpdateOrderStatusUsingQR,
+} from '../../hooks/useQueries';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
   SelectContent,
@@ -12,190 +20,196 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, ShoppingCart, CheckCircle } from 'lucide-react';
-import { toast } from 'sonner';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { AlertCircle, Loader2, Plus, QrCode } from 'lucide-react';
+import type { OrderRecord } from '../../backend';
 
-function generateOrderId(): string {
-  const now = new Date();
-  const datePart = now.toISOString().slice(0, 10).replace(/-/g, '');
-  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `ORD-${datePart}-${rand}`;
+const QRScanModal = React.lazy(() => import('../../components/qr/QRScanModal'));
+
+interface OrderForm {
+  storeId: string;
+  quantity: string;
+  rate: string;
+  notes: string;
 }
+
+const emptyForm: OrderForm = { storeId: '', quantity: '', rate: '', notes: '' };
 
 export default function OrderCreationPage() {
   const { user } = useAuth();
-  const { data: stores = [], isLoading: storesLoading } = useAllStores();
-  const createOrderMutation = useCreateOrder();
+  const email = user?.email ?? '';
 
-  const [storeId, setStoreId] = useState<string>('');
-  const [quantity, setQuantity] = useState<string>('');
-  const [rate, setRate] = useState<string>('');
-  const [notes, setNotes] = useState<string>('');
+  const { data: orders = [], isLoading: ordersLoading } = useAllOrders(email);
+  const { data: stores = [], isLoading: storesLoading } = useAllStores(email);
+  const createOrderMutation = useCreateOrder();
+  const updateQRMutation = useUpdateOrderStatusUsingQR();
+
+  const [form, setForm] = useState<OrderForm>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState('');
+  const [formSuccess, setFormSuccess] = useState('');
+  const [scanTarget, setScanTarget] = useState<OrderRecord | null>(null);
+
+  const approvedOrders = React.useMemo(
+    () => (orders ?? []).filter((o) => o.status === 'Approved' || o.status === 'Ready'),
+    [orders],
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setSuccess(false);
-
-    if (!storeId) {
-      setError('Please select a store.');
+    if (!form.storeId) {
+      setFormError('Please select a store.');
       return;
     }
-    const qty = parseInt(quantity, 10);
-    const rateVal = parseFloat(rate);
-    if (!qty || qty <= 0) {
-      setError('Please enter a valid quantity.');
+    const qty = parseInt(form.quantity);
+    const rate = parseFloat(form.rate);
+    if (isNaN(qty) || qty <= 0) {
+      setFormError('Please enter a valid quantity.');
       return;
     }
-    if (!rateVal || rateVal <= 0) {
-      setError('Please enter a valid rate.');
+    if (isNaN(rate) || rate <= 0) {
+      setFormError('Please enter a valid rate.');
       return;
     }
-
     setSubmitting(true);
+    setFormError('');
+    setFormSuccess('');
     try {
-      const orderId = generateOrderId();
-      await createOrderMutation.mutateAsync({
+      const orderId = `ORD-${Date.now()}`;
+      const order: OrderRecord = {
         orderId,
-        storeId: BigInt(storeId),
+        storeId: BigInt(form.storeId),
         quantity: BigInt(qty),
-        rate: rateVal,
-        notes: notes.trim(),
+        rate,
+        notes: form.notes.trim(),
         status: 'Pending Approval',
-        timestamp: BigInt(Date.now()),
-      });
-      setSuccess(true);
-      setStoreId('');
-      setQuantity('');
-      setRate('');
-      setNotes('');
-      toast.success(`Order ${orderId} created successfully!`);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg.includes('Permission') ? 'Permission denied. Please ensure you are logged in.' : msg);
-      toast.error('Failed to create order');
+        timestamp: BigInt(Date.now()) * BigInt(1_000_000),
+      };
+      await createOrderMutation.mutateAsync({ order, sessionEmail: email });
+      setForm(emptyForm);
+      setFormSuccess(`Order ${orderId} created successfully!`);
+      setTimeout(() => setFormSuccess(''), 4000);
+    } catch (err: any) {
+      setFormError(err?.message || 'Failed to create order.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  return (
-    <div className="max-w-xl mx-auto space-y-6 animate-slide-up">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Create Order</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Place a new order for a store — it will be sent for admin approval
-        </p>
-      </div>
+  const handleScanned = async (qrValue: string) => {
+    if (!scanTarget) return;
+    try {
+      await updateQRMutation.mutateAsync({
+        orderId: scanTarget.orderId,
+        qrCodeValue: qrValue,
+        sessionEmail: email,
+      });
+    } catch (err) {
+      console.error('QR scan update error:', err);
+    } finally {
+      setScanTarget(null);
+    }
+  };
 
-      <Card className="card-shadow">
+  const getStoreName = (storeId: bigint) => {
+    const idx = Number(storeId) - 1;
+    return stores[idx]?.storeName ?? `Store #${storeId}`;
+  };
+
+  return (
+    <div className="p-6 space-y-6">
+      <h1 className="text-2xl font-bold text-foreground">Create Order</h1>
+
+      {/* New Order Form */}
+      <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <ShoppingCart className="h-4 w-4 text-primary" />
-            New Order
-          </CardTitle>
+          <CardTitle className="text-base">New Order</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            {success && (
-              <Alert className="border-green-200 bg-green-50">
-                <CheckCircle className="h-4 w-4 text-green-600" />
-                <AlertDescription className="text-green-800">
-                  Order created successfully and sent for approval!
-                </AlertDescription>
-              </Alert>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="store">Store *</Label>
-              {storesLoading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading stores...
-                </div>
-              ) : (
-                <Select value={storeId} onValueChange={setStoreId}>
-                  <SelectTrigger id="store">
-                    <SelectValue placeholder="Select a store" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stores.map((store, idx) => (
-                      <SelectItem key={idx} value={String(idx + 1)}>
-                        {store.storeName} — {store.ownerName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="quantity">Quantity (units) *</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label>Store *</Label>
+                {storesLoading ? (
+                  <Skeleton className="h-10 w-full" />
+                ) : (
+                  <Select
+                    value={form.storeId}
+                    onValueChange={(v) => setForm((f) => ({ ...f, storeId: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a store" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stores.map((store, idx) => (
+                        <SelectItem key={idx} value={String(idx + 1)}>
+                          {store.storeName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              <div className="space-y-1">
+                <Label>Quantity *</Label>
                 <Input
-                  id="quantity"
                   type="number"
                   min="1"
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
+                  value={form.quantity}
+                  onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
                   placeholder="e.g. 100"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="rate">Rate (₹ per unit) *</Label>
+              <div className="space-y-1">
+                <Label>Rate (₹) *</Label>
                 <Input
-                  id="rate"
                   type="number"
                   min="0"
                   step="0.01"
-                  value={rate}
-                  onChange={(e) => setRate(e.target.value)}
-                  placeholder="e.g. 12.50"
+                  value={form.rate}
+                  onChange={(e) => setForm((f) => ({ ...f, rate: e.target.value }))}
+                  placeholder="e.g. 15.50"
                 />
               </div>
             </div>
-
-            {quantity && rate && (
-              <div className="rounded-lg bg-primary/5 border border-primary/20 px-4 py-3">
-                <p className="text-sm text-muted-foreground">
-                  Total Value:{' '}
-                  <span className="font-bold text-foreground text-base">
-                    ₹{(parseFloat(quantity || '0') * parseFloat(rate || '0')).toFixed(2)}
-                  </span>
-                </p>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
+            <div className="space-y-1">
+              <Label>Notes</Label>
               <Textarea
-                id="notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Optional notes for this order..."
-                rows={3}
+                value={form.notes}
+                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                placeholder="Additional notes…"
+                rows={2}
               />
             </div>
 
-            <Button type="submit" className="w-full gap-2" disabled={submitting || storesLoading}>
+            {formError && (
+              <div className="flex items-center gap-2 text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <p className="text-sm">{formError}</p>
+              </div>
+            )}
+            {formSuccess && (
+              <div className="bg-green-50 border border-green-200 rounded-md p-2">
+                <p className="text-sm text-green-700">{formSuccess}</p>
+              </div>
+            )}
+
+            <Button type="submit" disabled={submitting}>
               {submitting ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Creating Order...
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Creating…
                 </>
               ) : (
                 <>
-                  <ShoppingCart className="h-4 w-4" />
+                  <Plus className="h-4 w-4 mr-2" />
                   Create Order
                 </>
               )}
@@ -203,6 +217,82 @@ export default function OrderCreationPage() {
           </form>
         </CardContent>
       </Card>
+
+      {/* Approved Orders */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            Approved Orders{' '}
+            <span className="text-muted-foreground font-normal text-sm">
+              ({approvedOrders.length})
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {ordersLoading ? (
+            <div className="p-4 space-y-2">
+              {[...Array(3)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : approvedOrders.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground">
+              <p className="text-sm">No approved orders.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Order ID</TableHead>
+                    <TableHead>Store</TableHead>
+                    <TableHead>Qty</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>QR Scan</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {approvedOrders.map((order) => (
+                    <TableRow key={order.orderId}>
+                      <TableCell className="font-mono text-xs">{order.orderId}</TableCell>
+                      <TableCell className="text-sm">{getStoreName(order.storeId)}</TableCell>
+                      <TableCell>{Number(order.quantity)}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{order.status}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {order.qrCode ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setScanTarget(order)}
+                          >
+                            <QrCode className="h-3 w-3 mr-1" />
+                            Scan
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">No QR</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* QR Scan Modal */}
+      <Suspense fallback={null}>
+        <QRScanModal
+          open={!!scanTarget}
+          onClose={() => setScanTarget(null)}
+          onScanned={handleScanned}
+          title="Scan Order QR"
+          description="Scan the QR code on the order to advance its status."
+        />
+      </Suspense>
     </div>
   );
 }

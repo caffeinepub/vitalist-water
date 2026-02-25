@@ -1,143 +1,140 @@
-import React, { useState } from 'react';
-import { useAllOrders, useUpdateOrder, useAllStores } from '../../hooks/useQueries';
-import { useActor } from '../../hooks/useActor';
-import { OrderRecord } from '../../backend';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import React, { useState, Suspense } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+import { useAllOrders, useApproveOrder, useAllStores } from '../../hooks/useQueries';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { CheckCircle, XCircle, Truck, Package, Search, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { AlertCircle, Loader2, Printer } from 'lucide-react';
+import type { OrderRecord } from '../../backend';
+import QRPrintView from '../../components/orders/QRPrintView';
 
-const STATUS_COLORS: Record<string, string> = {
-  'Pending Approval': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-  'Approved': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-  'Dispatched': 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
-  'Out for Delivery': 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
-  'Delivered': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-  'Cancelled': 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+const ORDER_STATUSES = [
+  'All',
+  'Pending Approval',
+  'Approved',
+  'Ready',
+  'Assigned to Delivery',
+  'Dispatched',
+  'Out for Delivery',
+  'Trucks in Transit',
+  'Distributor Confirmations Pending',
+  'Delivered',
+];
+
+const ADMIN_TRANSITIONS: Record<string, string[]> = {
+  'Pending Approval': ['Approved', 'Rejected'],
+  'Approved': ['Assigned to Delivery'],
+  'Assigned to Delivery': ['Dispatched'],
 };
 
+function getStatusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+  switch (status) {
+    case 'Delivered': return 'default';
+    case 'Pending Approval': return 'secondary';
+    case 'Rejected': return 'destructive';
+    default: return 'outline';
+  }
+}
+
 export default function OrderManagementPage() {
-  const { actor, isFetching: actorFetching } = useActor();
-  const { data: orders = [], isLoading: ordersLoading } = useAllOrders();
-  const { data: stores = [] } = useAllStores();
-  const updateOrderMutation = useUpdateOrder();
-
-  const [search, setSearch] = useState('');
+  const { user } = useAuth();
+  const email = user?.email ?? '';
   const [statusFilter, setStatusFilter] = useState('All');
-  const [loadingOrderId, setLoadingOrderId] = useState<string | null>(null);
+  const [printOrder, setPrintOrder] = useState<OrderRecord | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
 
-  const actorReady = !!actor && !actorFetching;
+  const { data: orders = [], isLoading, error } = useAllOrders(email);
+  const { data: stores = [] } = useAllStores(email);
+  const approveOrderMutation = useApproveOrder();
+
+  const filteredOrders = React.useMemo(() => {
+    if (!orders) return [];
+    if (statusFilter === 'All') return orders;
+    return orders.filter((o) => o.status === statusFilter);
+  }, [orders, statusFilter]);
 
   const getStoreName = (storeId: bigint) => {
-    const store = stores.find((s, idx) => BigInt(idx + 1) === storeId);
-    return store?.storeName ?? `Store #${storeId}`;
+    const idx = Number(storeId) - 1;
+    return stores[idx]?.storeName ?? `Store #${storeId}`;
   };
 
-  const filteredOrders = orders.filter((o) => {
-    const matchesSearch =
-      o.orderId.toLowerCase().includes(search.toLowerCase()) ||
-      getStoreName(o.storeId).toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'All' || o.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
-  const handleStatusChange = async (order: OrderRecord, newStatus: string) => {
-    if (!actorReady) {
-      toast.error('System is initializing. Please wait a moment and try again.');
-      return;
-    }
-    setLoadingOrderId(order.orderId);
+  const handleApprove = async (orderId: string, newStatus: string) => {
+    if (!email) return;
+    setApprovingId(orderId);
     try {
-      await updateOrderMutation.mutateAsync({
-        orderId: order.orderId,
-        order: { ...order, status: newStatus },
-      });
-      toast.success(`Order ${order.orderId} status updated to ${newStatus}`);
-    } catch (err: any) {
-      const msg = err?.message ?? String(err);
-      if (msg.includes('Unauthorized') || msg.includes('permission')) {
-        toast.error('Permission denied. Please log out and log back in.');
-      } else {
-        toast.error(`Failed to update order: ${msg}`);
-      }
+      await approveOrderMutation.mutateAsync({ orderId, newStatus, sessionEmail: email });
+    } catch (err) {
+      console.error('Approve order error:', err);
     } finally {
-      setLoadingOrderId(null);
+      setApprovingId(null);
     }
   };
 
-  const isLoading = ordersLoading || actorFetching;
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="flex items-center gap-2 text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+          <AlertCircle className="h-5 w-5 shrink-0" />
+          <p>Failed to load orders. Please try again.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Order Management</h1>
-          <p className="text-muted-foreground text-sm mt-1">Approve, dispatch, and manage all orders</p>
-        </div>
+    <div className="p-6 space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="text-2xl font-bold text-foreground">Order Management</h1>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-56">
+            <SelectValue placeholder="Filter by status" />
+          </SelectTrigger>
+          <SelectContent>
+            {ORDER_STATUSES.map((s) => (
+              <SelectItem key={s} value={s}>
+                {s}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {['Pending Approval', 'Approved', 'Dispatched', 'Delivered'].map((status) => (
-          <Card key={status} className="card-shadow">
-            <CardContent className="pt-4 pb-4">
-              <p className="text-xs text-muted-foreground">{status}</p>
-              <p className="text-2xl font-bold text-foreground mt-1">
-                {orders.filter((o) => o.status === status).length}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search orders..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {['All', 'Pending Approval', 'Approved', 'Dispatched', 'Delivered', 'Cancelled'].map((s) => (
-            <Button
-              key={s}
-              variant={statusFilter === s ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setStatusFilter(s)}
-            >
-              {s}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      {/* Table */}
-      <Card className="card-shadow">
-        <CardHeader>
+      <Card>
+        <CardHeader className="pb-3">
           <CardTitle className="text-base">
-            Orders ({filteredOrders.length})
-            {!actorReady && (
-              <span className="ml-2 text-xs text-muted-foreground font-normal">
-                <Loader2 className="inline w-3 h-3 animate-spin mr-1" />
-                Initializing…
-              </span>
-            )}
+            Orders{' '}
+            <span className="text-muted-foreground font-normal text-sm">
+              ({filteredOrders.length})
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            <div className="p-4 space-y-2">
+              {[...Array(4)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
             </div>
           ) : filteredOrders.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">No orders found</div>
+            <div className="py-12 text-center text-muted-foreground">
+              <p className="text-sm">No orders found.</p>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -148,109 +145,56 @@ export default function OrderManagementPage() {
                     <TableHead>Qty</TableHead>
                     <TableHead>Rate</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>QR</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredOrders.map((order) => {
-                    const isRowLoading = loadingOrderId === order.orderId;
+                    const transitions = ADMIN_TRANSITIONS[order.status] ?? [];
+                    const isApproving = approvingId === order.orderId;
                     return (
                       <TableRow key={order.orderId}>
                         <TableCell className="font-mono text-xs">{order.orderId}</TableCell>
-                        <TableCell>{getStoreName(order.storeId)}</TableCell>
-                        <TableCell>{order.quantity.toString()}</TableCell>
-                        <TableCell>₹{order.rate.toFixed(2)}</TableCell>
+                        <TableCell className="text-sm">{getStoreName(order.storeId)}</TableCell>
+                        <TableCell>{Number(order.quantity)}</TableCell>
+                        <TableCell>₹{order.rate}</TableCell>
                         <TableCell>
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              STATUS_COLORS[order.status] ?? 'bg-muted text-muted-foreground'
-                            }`}
-                          >
+                          <Badge variant={getStatusVariant(order.status)}>
                             {order.status}
-                          </span>
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {order.qrCode ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setPrintOrder(order)}
+                            >
+                              <Printer className="h-3 w-3 mr-1" />
+                              Print
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1 flex-wrap">
-                            {order.status === 'Pending Approval' && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="text-green-600 border-green-300 hover:bg-green-50"
-                                  disabled={isRowLoading || !actorReady}
-                                  onClick={() => handleStatusChange(order, 'Approved')}
-                                >
-                                  {isRowLoading ? (
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                  ) : (
-                                    <CheckCircle className="w-3 h-3 mr-1" />
-                                  )}
-                                  Approve
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="text-red-600 border-red-300 hover:bg-red-50"
-                                  disabled={isRowLoading || !actorReady}
-                                  onClick={() => handleStatusChange(order, 'Cancelled')}
-                                >
-                                  {isRowLoading ? (
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                  ) : (
-                                    <XCircle className="w-3 h-3 mr-1" />
-                                  )}
-                                  Cancel
-                                </Button>
-                              </>
-                            )}
-                            {order.status === 'Approved' && (
+                            {transitions.map((t) => (
                               <Button
+                                key={t}
                                 size="sm"
-                                variant="outline"
-                                className="text-purple-600 border-purple-300 hover:bg-purple-50"
-                                disabled={isRowLoading || !actorReady}
-                                onClick={() => handleStatusChange(order, 'Dispatched')}
+                                variant={t === 'Rejected' ? 'destructive' : 'default'}
+                                disabled={isApproving}
+                                onClick={() => handleApprove(order.orderId, t)}
                               >
-                                {isRowLoading ? (
-                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                {isApproving ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
                                 ) : (
-                                  <Truck className="w-3 h-3 mr-1" />
+                                  t
                                 )}
-                                Dispatch
                               </Button>
-                            )}
-                            {order.status === 'Dispatched' && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-orange-600 border-orange-300 hover:bg-orange-50"
-                                disabled={isRowLoading || !actorReady}
-                                onClick={() => handleStatusChange(order, 'Out for Delivery')}
-                              >
-                                {isRowLoading ? (
-                                  <Loader2 className="w-3 h-3 animate-spin" />
-                                ) : (
-                                  <Package className="w-3 h-3 mr-1" />
-                                )}
-                                Out for Delivery
-                              </Button>
-                            )}
-                            {order.status === 'Out for Delivery' && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-green-600 border-green-300 hover:bg-green-50"
-                                disabled={isRowLoading || !actorReady}
-                                onClick={() => handleStatusChange(order, 'Delivered')}
-                              >
-                                {isRowLoading ? (
-                                  <Loader2 className="w-3 h-3 animate-spin" />
-                                ) : (
-                                  <CheckCircle className="w-3 h-3 mr-1" />
-                                )}
-                                Delivered
-                              </Button>
-                            )}
+                            ))}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -262,6 +206,15 @@ export default function OrderManagementPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* QR Print Modal */}
+      {printOrder && (
+        <QRPrintView
+          orderId={printOrder.orderId}
+          qrCodeValue={printOrder.qrCode?.value ?? printOrder.orderId}
+          onClose={() => setPrintOrder(null)}
+        />
+      )}
     </div>
   );
 }

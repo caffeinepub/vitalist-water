@@ -13,6 +13,8 @@ export default function SettingsPage() {
     distributor: 'Distributor',
   };
 
+  const displayName = user?.email ? user.email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '';
+
   return (
     <div className="space-y-6 animate-slide-up max-w-2xl">
       <div>
@@ -29,7 +31,7 @@ export default function SettingsPage() {
         <div className="space-y-3">
           <div className="flex items-center justify-between py-2 border-b border-border">
             <span className="text-sm text-muted-foreground">Name</span>
-            <span className="text-sm font-medium text-foreground">{user?.name}</span>
+            <span className="text-sm font-medium text-foreground">{displayName}</span>
           </div>
           <div className="flex items-center justify-between py-2 border-b border-border">
             <span className="text-sm text-muted-foreground">Email</span>
@@ -92,7 +94,7 @@ export default function SettingsPage() {
           <span className="font-bold text-foreground">VITALIST WATER</span>
         </div>
         <p className="text-xs text-muted-foreground">
-          Order & Delivery Management System © {new Date().getFullYear()}
+          Order &amp; Delivery Management System © {new Date().getFullYear()}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
           Built with{' '}

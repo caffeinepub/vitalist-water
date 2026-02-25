@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import AppSidebar from './AppSidebar';
-import { Menu, X, Bell, LogOut, User } from 'lucide-react';
+import { Menu, LogOut, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -29,12 +29,13 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
       <aside
         className={`
           fixed inset-y-0 left-0 z-30 w-64 bg-sidebar shadow-sidebar
-          transform transition-transform duration-300 ease-in-out
-          lg:relative lg:translate-x-0 lg:flex-shrink-0
+          transition-transform duration-300 ease-in-out
+          lg:relative lg:translate-x-0 lg:shrink-0
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         `}
       >
         <AppSidebar
+          role={currentUser?.role ?? ''}
           currentPage={currentPage}
           onNavigate={(page) => {
             onNavigate(page);
@@ -46,7 +47,7 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top bar */}
-        <header className="flex-shrink-0 h-16 bg-card border-b border-border flex items-center justify-between px-4 lg:px-6">
+        <header className="shrink-0 h-16 bg-card border-b border-border flex items-center justify-between px-4 lg:px-6">
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
@@ -69,7 +70,9 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
                 <User className="h-4 w-4 text-primary" />
               </div>
               <div className="hidden md:block">
-                <p className="text-sm font-medium text-foreground leading-none">{currentUser?.name}</p>
+                <p className="text-sm font-medium text-foreground leading-none">
+                  {currentUser?.email ?? ''}
+                </p>
                 <p className="text-xs text-muted-foreground capitalize mt-0.5">{currentUser?.role}</p>
               </div>
             </div>
@@ -86,7 +89,7 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6 animate-fade-in">
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
           {children}
         </main>
       </div>

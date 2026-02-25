@@ -1,53 +1,146 @@
 {
   "kind": "implementation_plan",
   "version": "1.0",
-  "title": "Fix newly added users: missing user ID display in panel and login failure",
+  "title": "Fix blank page crash after deployment",
   "requirements": [
     {
-      "id": "REQ-36",
-      "summary": "Fix the UserManagementPage.tsx user table to correctly display user IDs for newly created users after successful creation",
+      "id": "REQ-1",
+      "summary": "Diagnose and fix the blank page issue by auditing App.tsx for runtime errors, missing null guards on authentication state, and role-based routing logic. Ensure the app renders a visible UI for all authentication states.",
       "acceptanceCriteria": [
-        "After successfully adding a user, the user table refreshes and shows the new user's ID in the ID column.",
-        "No user row in the table displays a blank, undefined, or missing ID value.",
-        "The user list re-fetches (React Query invalidation) immediately after a successful addUser mutation so the new record appears without a manual page reload."
+        "The app loads and displays the login page or dashboard without going blank after a fresh deployment",
+        "No unhandled JavaScript exceptions are thrown during initial render",
+        "All role-based routes (admin, staff, delivery, distributor) render without blank screens",
+        "Unauthenticated users see the login page instead of a blank screen",
+        "The app recovers gracefully if backend actor initialization is slow or fails"
       ],
       "file_operations": [
         {
-          "path": "frontend/src/pages/admin/UserManagementPage.tsx",
+          "path": "frontend/src/App.tsx",
           "operation": "modify",
-          "description": "Ensure the user table correctly renders the 'id' field from the User type returned by the backend. Verify that after the addUser mutation succeeds, React Query invalidates the 'users' query key so the table re-fetches and displays the newly created user with the generated ID. Check that the table column mapping for user ID is not accessing undefined or empty values."
+          "description": "Add defensive null guards on all authentication state accesses (user, token, role checks). Ensure role-based routing logic explicitly handles undefined/null user states with fallback to LoginPage. Add loading states for actor initialization. Verify that the component returns valid JSX in all code paths (authenticated, unauthenticated, loading, error). Replace any implicit undefined returns with explicit loading or fallback UI."
         },
-        {
-          "path": "frontend/src/hooks/useQueries.ts",
-          "operation": "modify",
-          "description": "Review the useAddUser mutation to ensure it properly invalidates the 'users' query key on success. Confirm the mutation returns the complete User object including the assigned ID from the backend addUser response. Verify that the mutation's onSuccess callback triggers query invalidation immediately."
-        }
-      ]
-    },
-    {
-      "id": "REQ-37",
-      "summary": "Fix the frontend login flow so newly created users can successfully log in and are routed to the appropriate role-based page",
-      "acceptanceCriteria": [
-        "A user created via the Add User form can log in immediately after creation using the email and password provided during creation.",
-        "On successful login, a session token and the user's role are returned and stored in sessionStorage by AuthContext.tsx.",
-        "After login, the newly created user is routed to the page appropriate for their role (Staff → Order Creation, Delivery → Delivery Dashboard, Distributor → Distributor Dashboard, Admin → Dashboard).",
-        "No 'invalid credentials' or 'user not found' error is shown for a valid newly created account."
-      ],
-      "file_operations": [
         {
           "path": "frontend/src/contexts/AuthContext.tsx",
           "operation": "modify",
-          "description": "Update the login function to call the backend login capability (actor.login) instead of using the hardcoded local user list. Ensure the function sends the email and hashed password to the backend, receives the token and role in the response, stores both in sessionStorage, updates the user state with the authenticated user's details, and handles null responses (invalid credentials) with appropriate error messages. Remove or deprecate the hardcoded USERS array dependency for authentication. Preserve the existing session restoration logic in restoreSession."
+          "description": "Add defensive checks to prevent AuthContext from returning undefined user/token values that could cause downstream blank renders. Ensure sessionStorage access is wrapped in try-catch to handle corrupted or missing session data gracefully. Add a loading state to AuthContext that components can check before attempting to render role-dependent content."
         },
         {
           "path": "frontend/src/pages/LoginPage.tsx",
           "operation": "modify",
-          "description": "Ensure the LoginPage hashes the user's entered password before passing it to the AuthContext login function. Verify error handling displays appropriate messages when login fails (e.g., 'Invalid credentials' when the backend returns null). Confirm the loading state correctly reflects the async login operation."
+          "description": "Add null guards for authentication hooks and ensure the component renders a visible login form even if Internet Identity or actor is initializing. Prevent blank renders during authentication state transitions."
+        },
+        {
+          "path": "frontend/src/pages/Dashboard.tsx",
+          "operation": "modify",
+          "description": "Add defensive null checks on query results and authentication state. Ensure the component displays loading skeletons or fallback UI instead of returning undefined when data is pending or missing."
+        },
+        {
+          "path": "frontend/src/pages/admin/OrderManagementPage.tsx",
+          "operation": "modify",
+          "description": "Add null guards on orders query and authentication state. Ensure the component returns valid JSX in all states (loading, error, empty data)."
+        },
+        {
+          "path": "frontend/src/pages/admin/StoreManagementPage.tsx",
+          "operation": "modify",
+          "description": "Add null guards on stores query and authentication state. Ensure the component returns valid JSX in all states."
+        },
+        {
+          "path": "frontend/src/pages/admin/UserManagementPage.tsx",
+          "operation": "modify",
+          "description": "Add null guards on users query and authentication state. Ensure the component returns valid JSX in all states."
+        },
+        {
+          "path": "frontend/src/pages/staff/OrderCreationPage.tsx",
+          "operation": "modify",
+          "description": "Add null guards on orders and stores queries. Ensure the component returns valid JSX in all states."
+        },
+        {
+          "path": "frontend/src/pages/delivery/DeliveryDashboard.tsx",
+          "operation": "modify",
+          "description": "Add null guards on orders query and authentication state. Ensure the component returns valid JSX in all states."
+        },
+        {
+          "path": "frontend/src/pages/distributor/DistributorDashboard.tsx",
+          "operation": "modify",
+          "description": "Add null guards on deliveries query and authentication state. Ensure the component returns valid JSX in all states."
+        }
+      ]
+    },
+    {
+      "id": "REQ-2",
+      "summary": "Add a top-level error boundary component wrapping the entire React application in App.tsx to catch and display any unhandled render errors with a user-friendly fallback UI instead of a blank page.",
+      "acceptanceCriteria": [
+        "A React ErrorBoundary component wraps the top-level app content",
+        "When a render error is caught, a fallback UI is displayed instead of a blank page",
+        "The fallback UI includes a reload/retry button",
+        "The error boundary does not interfere with normal app rendering"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/components/ErrorBoundary.tsx",
+          "operation": "create",
+          "description": "Create a React class-based ErrorBoundary component with componentDidCatch lifecycle method to capture render errors. Implement a fallback UI that displays the app name 'Vitalist Water — Order & Delivery Management', an error message stating 'An unexpected error occurred', and a reload button that calls window.location.reload(). Include error logging to console for debugging. Export the component as default."
         },
         {
           "path": "frontend/src/App.tsx",
           "operation": "modify",
-          "description": "Verify that after successful login, the currentPage routing logic correctly maps the user's role to the appropriate initial page: 'staff' → 'order-creation', 'delivery' → 'delivery-dashboard', 'distributor' → 'distributor-dashboard', 'admin' → 'dashboard'. Ensure session restoration in useEffect correctly restores the user's role and navigates to the appropriate page without requiring re-login."
+          "description": "Import the ErrorBoundary component and wrap the entire app content (role-based routing and layout components) inside <ErrorBoundary>. Ensure the ErrorBoundary is placed immediately inside the root component return statement, above all authentication and routing logic."
+        }
+      ]
+    },
+    {
+      "id": "REQ-3",
+      "summary": "Audit all lazy-loaded or dynamically imported components (maps, Leaflet, QR scanner, camera) for missing Suspense boundaries or import failures that could cause a blank render. Wrap all such components with React.Suspense and appropriate loading fallbacks.",
+      "acceptanceCriteria": [
+        "All dynamically imported components (SatelliteMapView, QRScanModal, BarcodeScanStep) have Suspense boundaries with loading indicators",
+        "A failure to load a dynamic component does not blank out the entire page",
+        "Loading states are visible while async components initialize"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/components/map/SatelliteMapView.tsx",
+          "operation": "modify",
+          "description": "Audit the Leaflet CDN loading logic. Ensure the component returns valid JSX (a loading spinner or skeleton) while Leaflet scripts are being loaded. Add error handling for failed CDN loads and display a fallback message instead of causing a blank render. Verify the component never returns undefined or null without a fallback UI."
+        },
+        {
+          "path": "frontend/src/components/qr/QRScanModal.tsx",
+          "operation": "modify",
+          "description": "Verify the component uses camera/useCamera correctly. Ensure camera hook initialization errors are caught and displayed in the UI instead of causing a blank page. Add explicit loading states while the camera is initializing. Verify the component returns valid JSX in all states (supported, not-supported, error, loading)."
+        },
+        {
+          "path": "frontend/src/components/distributor/BarcodeScanStep.tsx",
+          "operation": "modify",
+          "description": "Verify the component uses qr-code/useQRScanner correctly. Ensure QR scanner hook errors and initialization states are properly handled with visible fallback UI. Add explicit loading states while jsQR library is loading. Verify the component returns valid JSX in all states."
+        },
+        {
+          "path": "frontend/src/pages/admin/LiveTrackingPage.tsx",
+          "operation": "modify",
+          "description": "Wrap the SatelliteMapView component usage with React.Suspense and provide a loading fallback (e.g., a spinner or 'Loading map...' message). Ensure query error states display a fallback UI instead of causing a blank render."
+        },
+        {
+          "path": "frontend/src/pages/admin/StoreManagementPage.tsx",
+          "operation": "modify",
+          "description": "Wrap the SatelliteMapView component usage with React.Suspense and provide a loading fallback. Ensure query error states display a fallback UI."
+        },
+        {
+          "path": "frontend/src/pages/admin/DeliveryVerificationPage.tsx",
+          "operation": "modify",
+          "description": "Wrap the SatelliteMapView component usage with React.Suspense and provide a loading fallback. Ensure query error states display a fallback UI."
+        },
+        {
+          "path": "frontend/src/pages/delivery/DeliveryDashboard.tsx",
+          "operation": "modify",
+          "description": "Wrap the QRScanModal component usage with React.Suspense and provide a loading fallback. Ensure the component handles QR scanner initialization errors gracefully."
+        },
+        {
+          "path": "frontend/src/pages/staff/OrderCreationPage.tsx",
+          "operation": "modify",
+          "description": "Wrap the QRScanModal component usage with React.Suspense and provide a loading fallback."
+        },
+        {
+          "path": "frontend/src/pages/ScanPage.tsx",
+          "operation": "modify",
+          "description": "Wrap the QRScanModal component usage with React.Suspense and provide a loading fallback. Ensure the component handles QR scanner initialization errors gracefully."
         }
       ]
     }

@@ -49,6 +49,7 @@ import { Loader2, Plus, Pencil, Trash2, Truck } from 'lucide-react';
 import { useActor } from '../../hooks/useActor';
 import { Principal } from '@dfinity/principal';
 import { toast } from 'sonner';
+import type { DistributorDelivery } from '../../backend';
 
 interface DeliveryFormData {
   deliveryId: string;
@@ -77,11 +78,12 @@ function generateDeliveryId(): string {
 }
 
 export default function DistributorDeliveryManagementPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
   const { actor, isFetching: actorFetching } = useActor();
+  const sessionEmail = user?.email ?? '';
 
-  const { data: deliveries = [], isLoading, error } = useAllDistributorDeliveries();
-  const { data: orders = [] } = useAllOrders();
+  const { data: deliveries = [], isLoading, error } = useAllDistributorDeliveries(sessionEmail);
+  const { data: orders = [] } = useAllOrders(sessionEmail);
   const createMutation = useCreateDistributorDelivery();
   const updateMutation = useUpdateDistributorDelivery();
   const deleteMutation = useDeleteDistributorDelivery();
@@ -149,7 +151,7 @@ export default function DistributorDeliveryManagementPage() {
       ? BigInt(new Date(form.estimatedDeliveryTime).getTime()) * BigInt(1_000_000)
       : BigInt(Date.now()) * BigInt(1_000_000);
 
-    const deliveryData = {
+    const deliveryData: DistributorDelivery = {
       deliveryId: form.deliveryId,
       orderId: form.orderId,
       truckNumber: form.truckNumber.trim(),
@@ -162,10 +164,17 @@ export default function DistributorDeliveryManagementPage() {
 
     try {
       if (editingId !== null) {
-        await updateMutation.mutateAsync({ deliveryId: editingId, delivery: deliveryData });
+        await updateMutation.mutateAsync({
+          deliveryId: editingId,
+          updatedDelivery: deliveryData,
+          sessionEmail,
+        });
         toast.success('Delivery updated successfully');
       } else {
-        await createMutation.mutateAsync(deliveryData);
+        await createMutation.mutateAsync({
+          delivery: deliveryData,
+          sessionEmail,
+        });
         toast.success('Delivery created successfully');
       }
       setDialogOpen(false);
@@ -179,7 +188,7 @@ export default function DistributorDeliveryManagementPage() {
   const handleDelete = async () => {
     if (!deleteConfirmId) return;
     try {
-      await deleteMutation.mutateAsync(deleteConfirmId);
+      await deleteMutation.mutateAsync({ deliveryId: deleteConfirmId, sessionEmail });
       toast.success('Delivery deleted successfully');
     } catch (err: unknown) {
       toast.error('Delete failed: ' + (err instanceof Error ? err.message : String(err)));

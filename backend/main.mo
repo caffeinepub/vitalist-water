@@ -5,16 +5,18 @@ import List "mo:core/List";
 import Nat "mo:core/Nat";
 import Int "mo:core/Int";
 import Order "mo:core/Order";
+import Iter "mo:core/Iter";
+import Blob "mo:core/Blob";
+import Array "mo:core/Array";
 import Runtime "mo:core/Runtime";
 import Principal "mo:core/Principal";
-import Iter "mo:core/Iter";
-import Migration "migration";
-
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
+import Storage "blob-storage/Storage";
+import MixinStorage "blob-storage/Mixin";
 
-// Specify the data migration function in the main actor's with-clause
-(with migration = Migration.run)
+
+
 actor {
   public type AppUserRole = {
     #admin;
@@ -81,6 +83,18 @@ actor {
 
   let stores = Map.empty<Nat, Store>();
 
+  public type QRCodeData = {
+    value : Text;
+    scanned : Bool;
+    scanTimestamp : ?Time.Time;
+  };
+
+  public type GpsLocation = {
+    latitude : Float;
+    longitude : Float;
+    timestamp : Int;
+  };
+
   public type OrderRecord = {
     orderId : Text;
     storeId : Nat;
@@ -89,6 +103,13 @@ actor {
     notes : Text;
     status : Text;
     timestamp : Int;
+    qrCode : ?QRCodeData;
+    invoicePDF : ?Blob;
+    barcodeScan : ?Text;
+    loadedTruckImage : ?Blob;
+    unloadedTruckImage : ?Blob;
+    gpsLocation : ?GpsLocation;
+    emptyTruckImage : ?Storage.ExternalBlob;
   };
 
   module OrderRecord {
@@ -118,19 +139,17 @@ actor {
 
   let distributorDeliveries = Map.empty<Text, DistributorDelivery>();
 
-  // Counter for generating unique user IDs
   var userIdCounter : Nat = 0;
 
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
+  include MixinStorage();
 
-  // Helper: generate a unique user ID
   func generateUserId() : Text {
     userIdCounter += 1;
     "user_" # userIdCounter.toText() # "_" # Time.now().toText();
   };
 
-  // Helper: check if an email belongs to an admin user (session-based auth)
   func isAdminByEmail(email : Text) : Bool {
     switch (users.get(email)) {
       case (?user) {
@@ -143,7 +162,6 @@ actor {
     };
   };
 
-  // Helper: check if an email belongs to any known (non-guest) user
   func isKnownUser(email : Text) : Bool {
     switch (users.get(email)) {
       case (?_) { true };
@@ -151,7 +169,18 @@ actor {
     };
   };
 
-  // Helper: check if caller is authenticated via Internet Identity OR email session
+  func isDistributorByEmail(email : Text) : Bool {
+    switch (users.get(email)) {
+      case (?user) {
+        switch (user.role) {
+          case (#distributor) { true };
+          case (_) { false };
+        };
+      };
+      case (null) { false };
+    };
+  };
+
   func requireAdminAccess(
     caller : Principal,
     sessionEmail : Text,
@@ -170,6 +199,25 @@ actor {
       return;
     };
     if (isKnownUser(sessionEmail)) {
+      return;
+    };
+    Runtime.trap("Unauthorized: Only authenticated users can perform this action");
+  };
+
+  func requireDistributorOrAdminAccess(
+    caller : Principal,
+    sessionEmail : Text,
+  ) : () {
+    if (AccessControl.isAdmin(accessControlState, caller)) {
+      return;
+    };
+    if (isAdminByEmail(sessionEmail)) {
+      return;
+    };
+    if (AccessControl.hasPermission(accessControlState, caller, #user)) {
+      return;
+    };
+    if (isDistributorByEmail(sessionEmail)) {
       return;
     };
     Runtime.trap("Unauthorized: Only authenticated users can perform this action");
@@ -315,7 +363,6 @@ actor {
     };
   };
 
-  // Session-based login: returns a record with role and token if credentials match
   public query func login(email : Text, hashedPassword : Text) : async ?{
     role : Text;
     token : Text;
@@ -329,7 +376,6 @@ actor {
             case (#delivery) { "delivery" };
             case (#distributor) { "distributor" };
           };
-          // Token encodes email and role for session identification
           let token = email # ":" # roleText # ":" # user.id;
           ?{ role = roleText; token = token };
         } else {
@@ -339,8 +385,6 @@ actor {
       case (null) { null };
     };
   };
-
-  // Store management
 
   public shared ({ caller }) func addStore(
     store : Store,
@@ -425,7 +469,6 @@ actor {
     orders.values().toArray().sort();
   };
 
-  // Admin-only: list all users — uses requireAdminAccess for consistency
   public query ({ caller }) func getAllUsers(
     sessionEmail : Text,
   ) : async [User] {
@@ -433,7 +476,6 @@ actor {
     users.values().toArray().sort();
   };
 
-  // Admin-only: add a new user and return the created user with assigned ID
   public shared ({ caller }) func addUser(
     userInput : { email : Text; hashedPassword : Text; role : AppUserRole },
     sessionEmail : Text,
@@ -496,10 +538,15 @@ actor {
     updatedDelivery : DistributorDelivery,
     sessionEmail : Text,
   ) : async () {
-    requireAdminAccess(caller, sessionEmail);
+    let callerIsAdmin = AccessControl.isAdmin(accessControlState, caller) or isAdminByEmail(sessionEmail);
+
     switch (distributorDeliveries.get(deliveryId)) {
       case (null) { Runtime.trap("Distributor delivery does not exist") };
-      case (?_) {
+      case (?existing) {
+        let callerIsAssignedDistributor = (caller == existing.distributor) or (isDistributorByEmail(sessionEmail) and sessionEmail == existing.driverName);
+        if (not callerIsAdmin and not callerIsAssignedDistributor) {
+          Runtime.trap("Unauthorized: Only admins or the assigned distributor can update this delivery");
+        };
         distributorDeliveries.add(deliveryId, updatedDelivery);
       };
     };
@@ -529,12 +576,10 @@ actor {
     distributor : Principal,
     sessionEmail : Text,
   ) : async [DistributorDelivery] {
-    let callerIsAdmin = AccessControl.isAdmin(
-      accessControlState,
-      caller,
-    ) or isAdminByEmail(sessionEmail);
+    let callerIsAdmin = AccessControl.isAdmin(accessControlState, caller) or isAdminByEmail(sessionEmail);
     let callerIsOwner = caller == distributor;
-    if (not callerIsAdmin and not callerIsOwner) {
+    let sessionIsDistributor = isDistributorByEmail(sessionEmail);
+    if (not callerIsAdmin and not callerIsOwner and not sessionIsDistributor) {
       Runtime.trap("Unauthorized: Can only view your own deliveries");
     };
     let filteredList = List.empty<DistributorDelivery>();
@@ -550,10 +595,7 @@ actor {
     deliveryId : Text,
     sessionEmail : Text,
   ) : async ?DistributorDelivery {
-    let callerIsAdmin = AccessControl.isAdmin(
-      accessControlState,
-      caller,
-    ) or isAdminByEmail(sessionEmail);
+    let callerIsAdmin = AccessControl.isAdmin(accessControlState, caller) or isAdminByEmail(sessionEmail);
     if (not callerIsAdmin) {
       switch (distributorDeliveries.get(deliveryId)) {
         case (null) {
@@ -562,7 +604,8 @@ actor {
           );
         };
         case (?delivery) {
-          if (caller != delivery.distributor) {
+          let callerIsAssignedDistributor = (caller == delivery.distributor) or isDistributorByEmail(sessionEmail);
+          if (not callerIsAssignedDistributor) {
             Runtime.trap(
               "Unauthorized: Only admins or the assigned distributor can view this delivery"
             );
@@ -572,5 +615,376 @@ actor {
       };
     };
     distributorDeliveries.get(deliveryId);
+  };
+
+  public shared ({ caller }) func approveOrder(
+    orderId : Text,
+    newStatus : Text,
+    sessionEmail : Text,
+  ) : async () {
+    requireAdminAccess(caller, sessionEmail);
+
+    switch (orders.get(orderId)) {
+      case (null) { Runtime.trap("Order does not exist") };
+      case (?existingOrder) {
+        let updatedOrder : OrderRecord = {
+          existingOrder with
+          status = newStatus;
+          qrCode = shouldGenerateQRCode(existingOrder, newStatus);
+        };
+        orders.add(orderId, updatedOrder);
+      };
+    };
+  };
+
+  func shouldGenerateQRCode(order : OrderRecord, newStatus : Text) : ?QRCodeData {
+    switch (order.qrCode) {
+      case (?existingQRCode) { ?existingQRCode };
+      case (null) {
+        if (newStatus == "Assigned to Delivery") {
+          ?{
+            value = order.orderId;
+            scanned = false;
+            scanTimestamp = null;
+          };
+        } else {
+          null;
+        };
+      };
+    };
+  };
+
+  public query ({ caller }) func getAdminDashboardStats(
+    sessionEmail : Text,
+  ) : async {
+    totalOrdersToday : Nat;
+    activeDeliveries : Nat;
+    trucksInTransit : Nat;
+    deliveredToday : Nat;
+    pendingApproval : Nat;
+    confirmationsPending : Nat;
+  } {
+    requireAdminAccess(caller, sessionEmail);
+
+    let currentTime = Time.now();
+    let midnight = currentTime - (currentTime % 86400000000000);
+
+    var totalOrdersToday = 0;
+    var activeDeliveries = 0;
+    var trucksInTransit = 0;
+    var deliveredToday = 0;
+    var pendingApproval = 0;
+    var confirmationsPending = 0;
+
+    for (order in orders.values()) {
+      if (order.timestamp > midnight) {
+        totalOrdersToday += 1;
+        if (order.status == "Delivered") { deliveredToday += 1 };
+      };
+
+      if (order.status == "Out for Delivery") {
+        activeDeliveries += 1;
+      };
+
+      if (order.status == "Trucks in Transit") {
+        trucksInTransit += 1;
+      };
+
+      if (order.status == "Pending Approval") {
+        pendingApproval += 1;
+      };
+
+      if (order.status == "Distributor Confirmations Pending") {
+        confirmationsPending += 1;
+      };
+    };
+
+    {
+      totalOrdersToday;
+      activeDeliveries;
+      trucksInTransit;
+      deliveredToday;
+      pendingApproval;
+      confirmationsPending;
+    };
+  };
+
+  public query ({ caller }) func getDeliveryVerificationRecords(
+    sessionEmail : Text,
+  ) : async [{
+    orderId : Text;
+    storeName : Text;
+    distributor : Principal;
+    truckNumber : Text;
+    driverName : Text;
+    timestamp : Int;
+    loadedTruckImage : ?Blob;
+    unloadedTruckImage : ?Blob;
+    emptyTruckImage : ?Storage.ExternalBlob;
+    storeRecord : ?Store;
+    orderContents : {
+      quantity : Nat;
+      rate : Float;
+      notes : Text;
+    };
+  }] {
+    requireAdminAccess(caller, sessionEmail);
+    let recordsList = List.empty<{
+      orderId : Text;
+      storeName : Text;
+      distributor : Principal;
+      truckNumber : Text;
+      driverName : Text;
+      timestamp : Int;
+      loadedTruckImage : ?Blob;
+      unloadedTruckImage : ?Blob;
+      emptyTruckImage : ?Storage.ExternalBlob;
+      storeRecord : ?Store;
+      orderContents : {
+        quantity : Nat;
+        rate : Float;
+        notes : Text;
+      };
+    }>();
+
+    for (order in orders.values()) {
+      switch (order.status) {
+        case ("Delivered") {
+          let matchingDelivery = distributorDeliveries.values().find(func(d) { d.orderId == order.orderId });
+          switch (matchingDelivery) {
+            case (?delivery) {
+              let storeRecord = stores.get(order.storeId);
+
+              let record = {
+                orderId = order.orderId;
+                storeName = order.orderId;
+                distributor = delivery.distributor;
+                truckNumber = delivery.truckNumber;
+                driverName = delivery.driverName;
+                timestamp = order.timestamp;
+                loadedTruckImage = order.loadedTruckImage;
+                unloadedTruckImage = order.unloadedTruckImage;
+                emptyTruckImage = order.emptyTruckImage;
+                storeRecord;
+                orderContents = {
+                  quantity = order.quantity;
+                  rate = order.rate;
+                  notes = order.notes;
+                };
+              };
+              recordsList.add(record);
+            };
+            case (null) {};
+          };
+        };
+        case (_) {};
+      };
+    };
+
+    recordsList.toArray();
+  };
+
+  public shared ({ caller }) func submitDistributorConfirmation(
+    orderId : Text,
+    barcodeScan : Text,
+    loadedTruckImage : Blob,
+    unloadedTruckImage : Blob,
+    sessionEmail : Text,
+  ) : async () {
+    requireDistributorOrAdminAccess(caller, sessionEmail);
+
+    let order = switch (orders.get(orderId)) {
+      case (?o) { o };
+      case (null) {
+        Runtime.trap(
+          "Order not found. Cannot submit distributor confirmation."
+        );
+      };
+    };
+
+    if (order.status != "Distributor Confirmations Pending") {
+      Runtime.trap(
+        "Order is not in the correct workflow stage for distributor confirmations."
+      );
+    };
+
+    let callerIsAdmin = AccessControl.isAdmin(accessControlState, caller) or isAdminByEmail(sessionEmail);
+    if (not callerIsAdmin) {
+      let matchingDelivery = distributorDeliveries.values().find(func(d) { d.orderId == orderId });
+      switch (matchingDelivery) {
+        case (?delivery) {
+          let callerIsAssignedDistributor = (caller == delivery.distributor) or isDistributorByEmail(sessionEmail);
+          if (not callerIsAssignedDistributor) {
+            Runtime.trap("Unauthorized: Only the assigned distributor or an admin can submit confirmation for this order");
+          };
+        };
+        case (null) {
+          if (not isDistributorByEmail(sessionEmail)) {
+            Runtime.trap("Unauthorized: Only the assigned distributor or an admin can submit confirmation for this order");
+          };
+        };
+      };
+    };
+
+    let updatedOrder : OrderRecord = {
+      order with
+      barcodeScan = ?barcodeScan;
+      loadedTruckImage = ?loadedTruckImage;
+      unloadedTruckImage = ?unloadedTruckImage;
+      status = "Delivered";
+    };
+
+    orders.add(orderId, updatedOrder);
+  };
+
+  public shared ({ caller }) func updateOrderStatusUsingQR(
+    orderId : Text,
+    qrCodeValue : Text,
+    sessionEmail : Text,
+  ) : async () {
+    requireUserAccess(caller, sessionEmail);
+
+    let order = switch (orders.get(orderId)) {
+      case (?o) { o };
+      case (null) {
+        Runtime.trap("Order not found. Cannot update order status using QR.");
+      };
+    };
+
+    switch (order.qrCode) {
+      case (?qr) {
+        if (qr.value != qrCodeValue) {
+          Runtime.trap("Invalid QR code value provided. Status update failed.");
+        };
+      };
+      case (null) {
+        Runtime.trap("Order does not have a valid QR code. Status update failed.");
+      };
+    };
+
+    let nextStatus = switch (order.status) {
+      case ("Approved") { "Ready" };
+      case ("Ready") { "Dispatched" };
+      case ("Dispatched") { "Out for Delivery" };
+      case ("Out for Delivery") { "Trucks in Transit" };
+      case ("Trucks in Transit") { "Distributor Confirmations Pending" };
+      case ("Distributor Confirmations Pending") { "Delivered" };
+      case ("Delivered") { Runtime.trap("Order is already delivered and locked. No further transitions allowed.") };
+      case ("Locked") { Runtime.trap("Order is permanently locked. No further transitions allowed.") };
+      case (_) { Runtime.trap("Invalid workflow state. Cannot transition order further.") };
+    };
+
+    let updatedOrder : OrderRecord = { order with status = nextStatus };
+    orders.add(orderId, updatedOrder);
+  };
+
+  public query ({ caller }) func getOrderWorkflowStatus(
+    orderId : Text,
+    sessionEmail : Text,
+  ) : async Text {
+    requireUserAccess(caller, sessionEmail);
+    switch (orders.get(orderId)) {
+      case (null) { Runtime.trap("Order ID does not exist. Cannot fetch status.") };
+      case (?order) { order.status };
+    };
+  };
+
+  public query ({ caller }) func filterOrdersByStatus(
+    status : Text,
+    sessionEmail : Text,
+  ) : async [OrderRecord] {
+    requireUserAccess(caller, sessionEmail);
+
+    let filteredOrders = orders.values().toArray().filter(
+      func(_order) {
+        _order.status == status;
+      }
+    );
+
+    filteredOrders;
+  };
+
+  public query ({ caller }) func getOrderWithImages(
+    orderId : Text,
+    sessionEmail : Text,
+  ) : async ?OrderRecord {
+    requireUserAccess(caller, sessionEmail);
+    orders.get(orderId);
+  };
+
+  public shared ({ caller }) func addGpsLocation(
+    orderId : Text,
+    latitude : Float,
+    longitude : Float,
+    sessionEmail : Text,
+  ) : async () {
+    requireUserAccess(caller, sessionEmail);
+
+    switch (orders.get(orderId)) {
+      case (null) { Runtime.trap("Order does not exist") };
+      case (?order) {
+        let updatedOrder : OrderRecord = {
+          order with gpsLocation = ?{
+            latitude;
+            longitude;
+            timestamp = Time.now();
+          };
+        };
+        orders.add(orderId, updatedOrder);
+      };
+    };
+  };
+
+  public query ({ caller }) func getLiveTrackingData(
+    sessionEmail : Text,
+  ) : async [{
+    orderId : Text;
+    status : Text;
+    location : ?GpsLocation;
+  }] {
+    requireAdminAccess(caller, sessionEmail);
+
+    let currentTime = Time.now();
+    let trackingWindow : Int = 86400000000;
+
+    let recentOrders = orders.values().toArray().filter(
+      func(order) {
+        if (order.timestamp > currentTime) { false } else {
+          switch (order.gpsLocation) {
+            case (null) { false };
+            case (?loc) { (currentTime - order.timestamp) <= trackingWindow };
+          };
+        };
+      }
+    );
+
+    recentOrders.map(func(order) { { orderId = order.orderId; status = order.status; location = order.gpsLocation } });
+  };
+
+  public shared ({ caller }) func addEmptyTruckImage(
+    orderId : Text,
+    file : Storage.ExternalBlob,
+    sessionEmail : Text,
+  ) : async () {
+    requireUserAccess(caller, sessionEmail);
+
+    switch (orders.get(orderId)) {
+      case (null) { Runtime.trap("Order does not exist") };
+      case (?order) {
+        let updatedOrder : OrderRecord = { order with emptyTruckImage = ?file };
+        orders.add(orderId, updatedOrder);
+      };
+    };
+  };
+
+  public query ({ caller }) func getEmptyTruckImage(
+    orderId : Text,
+    sessionEmail : Text,
+  ) : async ?Storage.ExternalBlob {
+    requireAdminAccess(caller, sessionEmail);
+    switch (orders.get(orderId)) {
+      case (null) { null };
+      case (?order) { order.emptyTruckImage };
+    };
   };
 };

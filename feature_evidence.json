@@ -2,11 +2,18 @@
   "kind": "feature_evidence_report",
   "features": [
     {
-      "featureId": "feature-fix-the-usermanagementpage-tsx-user-table-so-that-after-a-new-user-is-created-the-user-s-id-is-correctly-displayed-in-the-user-list-table-panel-the-table-must-render-the-user-id-column-value-for-every-user-row-including-newly-created-users",
-      "featureTitle": "Fix the UserManagementPage.tsx user table so that after a new user is created, the user's ID is correctly displayed in the user list/table panel. The table must render the user ID column value for every user row, including newly created users.",
+      "featureId": "feature-diagnose-and-fix-the-blank-page-issue-that-occurs-after-deployment-audit-app-tsx-for-runtime-errors-including-undefined-variable-access-failed-imports-missing-null-guards-on-authentication-state-and-role-based-routing-logic-that-may-throw-before-rendering-ensure-the-app-renders-a-visible-ui-for-all-authentication-states-unauthenticated-loading-authenticated-with-any-role",
+      "featureTitle": "Diagnose and fix the blank page issue that occurs after deployment. Audit App.tsx for runtime errors including undefined variable access, failed imports, missing null guards on authentication state, and role-based routing logic that may throw before rendering. Ensure the app renders a visible UI for all authentication states (unauthenticated, loading, authenticated with any role).",
       "files": [
-        "frontend/src/hooks/useQueries.ts",
-        "frontend/src/pages/admin/UserManagementPage.tsx"
+        "frontend/src/App.tsx",
+        "frontend/src/contexts/AuthContext.tsx",
+        "frontend/src/pages/Dashboard.tsx",
+        "frontend/src/pages/LoginPage.tsx",
+        "frontend/src/pages/admin/OrderManagementPage.tsx",
+        "frontend/src/pages/admin/StoreManagementPage.tsx",
+        "frontend/src/pages/admin/UserManagementPage.tsx",
+        "frontend/src/pages/distributor/DistributorDashboard.tsx",
+        "frontend/src/pages/staff/OrderCreationPage.tsx"
       ],
       "components": [
         "authorization@4.0.0",
@@ -16,18 +23,20 @@
         "shadcn-ui@1.0.0",
         "build-template-react@1.0.0",
         "initial-app@1.0.0",
-        "github-export-icp-cli@1.0.0"
+        "github-export-icp-cli@1.0.0",
+        "blob-storage@4.0.0"
       ],
       "testIds": [
-        "REQ-36"
+        "REQ-1"
       ],
       "confidence": "high"
     },
     {
-      "featureId": "feature-fix-the-login-flow-so-that-newly-created-users-added-via-the-admin-s-add-user-form-can-successfully-log-in-with-their-assigned-email-and-password-audit-the-backend-login-function-in-main-mo-to-ensure-it-looks-up-users-by-email-against-the-full-users-map-including-dynamically-added-users-not-just-pre-seeded-accounts-verifies-the-hashed-password-correctly-and-returns-a-valid-session-token-and-role-on-success-ensure-authcontext-tsx-correctly-processes-the-login-response-and-stores-the-token-and-role-in-sessionstorage",
-      "featureTitle": "Fix the login flow so that newly created users (added via the Admin's Add User form) can successfully log in with their assigned email and password. Audit the backend login function in main.mo to ensure it looks up users by email against the full users map (including dynamically added users, not just pre-seeded accounts), verifies the hashed password correctly, and returns a valid session token and role on success. Ensure AuthContext.tsx correctly processes the login response and stores the token and role in sessionStorage.",
+      "featureId": "feature-add-a-top-level-error-boundary-component-wrapping-the-entire-react-application-in-app-tsx-to-catch-and-display-any-unhandled-render-errors-with-a-user-friendly-fallback-ui-instead-of-a-blank-page-the-fallback-should-show-the-app-name-and-a-message-indicating-an-error-occurred-with-a-reload-button",
+      "featureTitle": "Add a top-level error boundary component wrapping the entire React application in App.tsx to catch and display any unhandled render errors with a user-friendly fallback UI instead of a blank page. The fallback should show the app name and a message indicating an error occurred with a reload button.",
       "files": [
-        "frontend/src/contexts/AuthContext.tsx"
+        "frontend/src/App.tsx",
+        "frontend/src/components/ErrorBoundary.tsx"
       ],
       "components": [
         "authorization@4.0.0",
@@ -37,10 +46,38 @@
         "shadcn-ui@1.0.0",
         "build-template-react@1.0.0",
         "initial-app@1.0.0",
-        "github-export-icp-cli@1.0.0"
+        "github-export-icp-cli@1.0.0",
+        "blob-storage@4.0.0"
       ],
       "testIds": [
-        "REQ-37"
+        "REQ-2"
+      ],
+      "confidence": "high"
+    },
+    {
+      "featureId": "feature-audit-all-lazy-loaded-or-dynamically-imported-components-maps-leaflet-qr-scanner-camera-for-missing-suspense-boundaries-or-import-failures-that-could-cause-a-blank-render-wrap-all-such-components-with-react-suspense-and-appropriate-loading-fallbacks",
+      "featureTitle": "Audit all lazy-loaded or dynamically imported components (maps, Leaflet, QR scanner, camera) for missing Suspense boundaries or import failures that could cause a blank render. Wrap all such components with React.Suspense and appropriate loading fallbacks.",
+      "files": [
+        "frontend/src/components/distributor/BarcodeScanStep.tsx",
+        "frontend/src/components/map/SatelliteMapView.tsx",
+        "frontend/src/components/qr/QRScanModal.tsx",
+        "frontend/src/pages/ScanPage.tsx",
+        "frontend/src/pages/admin/StoreManagementPage.tsx",
+        "frontend/src/pages/staff/OrderCreationPage.tsx"
+      ],
+      "components": [
+        "authorization@4.0.0",
+        "qr-code@1.0.0",
+        "camera@1.0.0",
+        "core-infrastructure@1.0.2",
+        "shadcn-ui@1.0.0",
+        "build-template-react@1.0.0",
+        "initial-app@1.0.0",
+        "github-export-icp-cli@1.0.0",
+        "blob-storage@4.0.0"
+      ],
+      "testIds": [
+        "REQ-3"
       ],
       "confidence": "high"
     }

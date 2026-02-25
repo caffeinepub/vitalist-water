@@ -24,14 +24,32 @@ export interface DistributorDelivery {
   'truckNumber' : string,
   'driverName' : string,
 }
+export type ExternalBlob = Uint8Array;
+export interface GpsLocation {
+  'latitude' : number,
+  'longitude' : number,
+  'timestamp' : bigint,
+}
 export interface OrderRecord {
   'status' : string,
+  'invoicePDF' : [] | [Uint8Array],
+  'emptyTruckImage' : [] | [ExternalBlob],
   'storeId' : bigint,
+  'loadedTruckImage' : [] | [Uint8Array],
   'rate' : number,
   'orderId' : string,
+  'gpsLocation' : [] | [GpsLocation],
   'notes' : string,
+  'barcodeScan' : [] | [string],
   'timestamp' : bigint,
   'quantity' : bigint,
+  'unloadedTruckImage' : [] | [Uint8Array],
+  'qrCode' : [] | [QRCodeData],
+}
+export interface QRCodeData {
+  'value' : string,
+  'scanned' : boolean,
+  'scanTimestamp' : [] | [Time],
 }
 export interface Store {
   'latitude' : number,
@@ -58,8 +76,36 @@ export interface UserProfile {
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
+export interface _CaffeineStorageCreateCertificateResult {
+  'method' : string,
+  'blob_hash' : string,
+}
+export interface _CaffeineStorageRefillInformation {
+  'proposed_top_up_amount' : [] | [bigint],
+}
+export interface _CaffeineStorageRefillResult {
+  'success' : [] | [boolean],
+  'topped_up_amount' : [] | [bigint],
+}
 export interface _SERVICE {
+  '_caffeineStorageBlobIsLive' : ActorMethod<[Uint8Array], boolean>,
+  '_caffeineStorageBlobsToDelete' : ActorMethod<[], Array<Uint8Array>>,
+  '_caffeineStorageConfirmBlobDeletion' : ActorMethod<
+    [Array<Uint8Array>],
+    undefined
+  >,
+  '_caffeineStorageCreateCertificate' : ActorMethod<
+    [string],
+    _CaffeineStorageCreateCertificateResult
+  >,
+  '_caffeineStorageRefillCashier' : ActorMethod<
+    [[] | [_CaffeineStorageRefillInformation]],
+    _CaffeineStorageRefillResult
+  >,
+  '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
+  'addEmptyTruckImage' : ActorMethod<[string, ExternalBlob, string], undefined>,
+  'addGpsLocation' : ActorMethod<[string, number, number, string], undefined>,
   'addStore' : ActorMethod<[Store, string], undefined>,
   'addUser' : ActorMethod<
     [
@@ -68,6 +114,7 @@ export interface _SERVICE {
     ],
     User
   >,
+  'approveOrder' : ActorMethod<[string, string, string], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
   'createDistributorDelivery' : ActorMethod<
     [DistributorDelivery, string],
@@ -77,6 +124,18 @@ export interface _SERVICE {
   'deleteDistributorDelivery' : ActorMethod<[string, string], undefined>,
   'deleteStore' : ActorMethod<[bigint, string], undefined>,
   'deleteUser' : ActorMethod<[string, string], undefined>,
+  'filterOrdersByStatus' : ActorMethod<[string, string], Array<OrderRecord>>,
+  'getAdminDashboardStats' : ActorMethod<
+    [string],
+    {
+      'activeDeliveries' : bigint,
+      'pendingApproval' : bigint,
+      'deliveredToday' : bigint,
+      'confirmationsPending' : bigint,
+      'totalOrdersToday' : bigint,
+      'trucksInTransit' : bigint,
+    }
+  >,
   'getAllDistributorDeliveries' : ActorMethod<
     [string],
     Array<DistributorDelivery>
@@ -86,6 +145,28 @@ export interface _SERVICE {
   'getAllUsers' : ActorMethod<[string], Array<User>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
+  'getDeliveryVerificationRecords' : ActorMethod<
+    [string],
+    Array<
+      {
+        'distributor' : Principal,
+        'emptyTruckImage' : [] | [ExternalBlob],
+        'loadedTruckImage' : [] | [Uint8Array],
+        'orderId' : string,
+        'storeRecord' : [] | [Store],
+        'storeName' : string,
+        'timestamp' : bigint,
+        'orderContents' : {
+          'rate' : number,
+          'notes' : string,
+          'quantity' : bigint,
+        },
+        'truckNumber' : string,
+        'driverName' : string,
+        'unloadedTruckImage' : [] | [Uint8Array],
+      }
+    >
+  >,
   'getDistributorDeliveriesByUser' : ActorMethod<
     [Principal, string],
     Array<DistributorDelivery>
@@ -94,7 +175,16 @@ export interface _SERVICE {
     [string, string],
     [] | [DistributorDelivery]
   >,
+  'getEmptyTruckImage' : ActorMethod<[string, string], [] | [ExternalBlob]>,
+  'getLiveTrackingData' : ActorMethod<
+    [string],
+    Array<
+      { 'status' : string, 'orderId' : string, 'location' : [] | [GpsLocation] }
+    >
+  >,
   'getOrder' : ActorMethod<[string, string], [] | [OrderRecord]>,
+  'getOrderWithImages' : ActorMethod<[string, string], [] | [OrderRecord]>,
+  'getOrderWorkflowStatus' : ActorMethod<[string, string], string>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'initializeSystem' : ActorMethod<[], undefined>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
@@ -103,11 +193,16 @@ export interface _SERVICE {
     [] | [{ 'token' : string, 'role' : string }]
   >,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
+  'submitDistributorConfirmation' : ActorMethod<
+    [string, string, Uint8Array, Uint8Array, string],
+    undefined
+  >,
   'updateDistributorDelivery' : ActorMethod<
     [string, DistributorDelivery, string],
     undefined
   >,
   'updateOrder' : ActorMethod<[string, OrderRecord, string], undefined>,
+  'updateOrderStatusUsingQR' : ActorMethod<[string, string, string], undefined>,
   'updateStore' : ActorMethod<[bigint, Store, string], undefined>,
   'updateUser' : ActorMethod<[string, User, string], undefined>,
 }

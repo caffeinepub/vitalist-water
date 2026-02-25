@@ -8,6 +8,18 @@
 
 import { IDL } from '@icp-sdk/core/candid';
 
+export const _CaffeineStorageCreateCertificateResult = IDL.Record({
+  'method' : IDL.Text,
+  'blob_hash' : IDL.Text,
+});
+export const _CaffeineStorageRefillInformation = IDL.Record({
+  'proposed_top_up_amount' : IDL.Opt(IDL.Nat),
+});
+export const _CaffeineStorageRefillResult = IDL.Record({
+  'success' : IDL.Opt(IDL.Bool),
+  'topped_up_amount' : IDL.Opt(IDL.Nat),
+});
+export const ExternalBlob = IDL.Vec(IDL.Nat8);
 export const Store = IDL.Record({
   'latitude' : IDL.Float64,
   'ownerName' : IDL.Text,
@@ -46,14 +58,31 @@ export const DistributorDelivery = IDL.Record({
   'truckNumber' : IDL.Text,
   'driverName' : IDL.Text,
 });
+export const GpsLocation = IDL.Record({
+  'latitude' : IDL.Float64,
+  'longitude' : IDL.Float64,
+  'timestamp' : IDL.Int,
+});
+export const QRCodeData = IDL.Record({
+  'value' : IDL.Text,
+  'scanned' : IDL.Bool,
+  'scanTimestamp' : IDL.Opt(Time),
+});
 export const OrderRecord = IDL.Record({
   'status' : IDL.Text,
+  'invoicePDF' : IDL.Opt(IDL.Vec(IDL.Nat8)),
+  'emptyTruckImage' : IDL.Opt(ExternalBlob),
   'storeId' : IDL.Nat,
+  'loadedTruckImage' : IDL.Opt(IDL.Vec(IDL.Nat8)),
   'rate' : IDL.Float64,
   'orderId' : IDL.Text,
+  'gpsLocation' : IDL.Opt(GpsLocation),
   'notes' : IDL.Text,
+  'barcodeScan' : IDL.Opt(IDL.Text),
   'timestamp' : IDL.Int,
   'quantity' : IDL.Nat,
+  'unloadedTruckImage' : IDL.Opt(IDL.Vec(IDL.Nat8)),
+  'qrCode' : IDL.Opt(QRCodeData),
 });
 export const UserProfile = IDL.Record({
   'name' : IDL.Text,
@@ -62,7 +91,39 @@ export const UserProfile = IDL.Record({
 });
 
 export const idlService = IDL.Service({
+  '_caffeineStorageBlobIsLive' : IDL.Func(
+      [IDL.Vec(IDL.Nat8)],
+      [IDL.Bool],
+      ['query'],
+    ),
+  '_caffeineStorageBlobsToDelete' : IDL.Func(
+      [],
+      [IDL.Vec(IDL.Vec(IDL.Nat8))],
+      ['query'],
+    ),
+  '_caffeineStorageConfirmBlobDeletion' : IDL.Func(
+      [IDL.Vec(IDL.Vec(IDL.Nat8))],
+      [],
+      [],
+    ),
+  '_caffeineStorageCreateCertificate' : IDL.Func(
+      [IDL.Text],
+      [_CaffeineStorageCreateCertificateResult],
+      [],
+    ),
+  '_caffeineStorageRefillCashier' : IDL.Func(
+      [IDL.Opt(_CaffeineStorageRefillInformation)],
+      [_CaffeineStorageRefillResult],
+      [],
+    ),
+  '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+  'addEmptyTruckImage' : IDL.Func([IDL.Text, ExternalBlob, IDL.Text], [], []),
+  'addGpsLocation' : IDL.Func(
+      [IDL.Text, IDL.Float64, IDL.Float64, IDL.Text],
+      [],
+      [],
+    ),
   'addStore' : IDL.Func([Store, IDL.Text], [], []),
   'addUser' : IDL.Func(
       [
@@ -76,6 +137,7 @@ export const idlService = IDL.Service({
       [User],
       [],
     ),
+  'approveOrder' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
   'createDistributorDelivery' : IDL.Func(
       [DistributorDelivery, IDL.Text],
@@ -86,6 +148,25 @@ export const idlService = IDL.Service({
   'deleteDistributorDelivery' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'deleteStore' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'deleteUser' : IDL.Func([IDL.Text, IDL.Text], [], []),
+  'filterOrdersByStatus' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Vec(OrderRecord)],
+      ['query'],
+    ),
+  'getAdminDashboardStats' : IDL.Func(
+      [IDL.Text],
+      [
+        IDL.Record({
+          'activeDeliveries' : IDL.Nat,
+          'pendingApproval' : IDL.Nat,
+          'deliveredToday' : IDL.Nat,
+          'confirmationsPending' : IDL.Nat,
+          'totalOrdersToday' : IDL.Nat,
+          'trucksInTransit' : IDL.Nat,
+        }),
+      ],
+      ['query'],
+    ),
   'getAllDistributorDeliveries' : IDL.Func(
       [IDL.Text],
       [IDL.Vec(DistributorDelivery)],
@@ -96,6 +177,31 @@ export const idlService = IDL.Service({
   'getAllUsers' : IDL.Func([IDL.Text], [IDL.Vec(User)], ['query']),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+  'getDeliveryVerificationRecords' : IDL.Func(
+      [IDL.Text],
+      [
+        IDL.Vec(
+          IDL.Record({
+            'distributor' : IDL.Principal,
+            'emptyTruckImage' : IDL.Opt(ExternalBlob),
+            'loadedTruckImage' : IDL.Opt(IDL.Vec(IDL.Nat8)),
+            'orderId' : IDL.Text,
+            'storeRecord' : IDL.Opt(Store),
+            'storeName' : IDL.Text,
+            'timestamp' : IDL.Int,
+            'orderContents' : IDL.Record({
+              'rate' : IDL.Float64,
+              'notes' : IDL.Text,
+              'quantity' : IDL.Nat,
+            }),
+            'truckNumber' : IDL.Text,
+            'driverName' : IDL.Text,
+            'unloadedTruckImage' : IDL.Opt(IDL.Vec(IDL.Nat8)),
+          })
+        ),
+      ],
+      ['query'],
+    ),
   'getDistributorDeliveriesByUser' : IDL.Func(
       [IDL.Principal, IDL.Text],
       [IDL.Vec(DistributorDelivery)],
@@ -106,9 +212,37 @@ export const idlService = IDL.Service({
       [IDL.Opt(DistributorDelivery)],
       ['query'],
     ),
+  'getEmptyTruckImage' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Opt(ExternalBlob)],
+      ['query'],
+    ),
+  'getLiveTrackingData' : IDL.Func(
+      [IDL.Text],
+      [
+        IDL.Vec(
+          IDL.Record({
+            'status' : IDL.Text,
+            'orderId' : IDL.Text,
+            'location' : IDL.Opt(GpsLocation),
+          })
+        ),
+      ],
+      ['query'],
+    ),
   'getOrder' : IDL.Func(
       [IDL.Text, IDL.Text],
       [IDL.Opt(OrderRecord)],
+      ['query'],
+    ),
+  'getOrderWithImages' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Opt(OrderRecord)],
+      ['query'],
+    ),
+  'getOrderWorkflowStatus' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Text],
       ['query'],
     ),
   'getUserProfile' : IDL.Func(
@@ -124,12 +258,18 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+  'submitDistributorConfirmation' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Vec(IDL.Nat8), IDL.Vec(IDL.Nat8), IDL.Text],
+      [],
+      [],
+    ),
   'updateDistributorDelivery' : IDL.Func(
       [IDL.Text, DistributorDelivery, IDL.Text],
       [],
       [],
     ),
   'updateOrder' : IDL.Func([IDL.Text, OrderRecord, IDL.Text], [], []),
+  'updateOrderStatusUsingQR' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
   'updateStore' : IDL.Func([IDL.Nat, Store, IDL.Text], [], []),
   'updateUser' : IDL.Func([IDL.Text, User, IDL.Text], [], []),
 });
@@ -137,6 +277,18 @@ export const idlService = IDL.Service({
 export const idlInitArgs = [];
 
 export const idlFactory = ({ IDL }) => {
+  const _CaffeineStorageCreateCertificateResult = IDL.Record({
+    'method' : IDL.Text,
+    'blob_hash' : IDL.Text,
+  });
+  const _CaffeineStorageRefillInformation = IDL.Record({
+    'proposed_top_up_amount' : IDL.Opt(IDL.Nat),
+  });
+  const _CaffeineStorageRefillResult = IDL.Record({
+    'success' : IDL.Opt(IDL.Bool),
+    'topped_up_amount' : IDL.Opt(IDL.Nat),
+  });
+  const ExternalBlob = IDL.Vec(IDL.Nat8);
   const Store = IDL.Record({
     'latitude' : IDL.Float64,
     'ownerName' : IDL.Text,
@@ -175,14 +327,31 @@ export const idlFactory = ({ IDL }) => {
     'truckNumber' : IDL.Text,
     'driverName' : IDL.Text,
   });
+  const GpsLocation = IDL.Record({
+    'latitude' : IDL.Float64,
+    'longitude' : IDL.Float64,
+    'timestamp' : IDL.Int,
+  });
+  const QRCodeData = IDL.Record({
+    'value' : IDL.Text,
+    'scanned' : IDL.Bool,
+    'scanTimestamp' : IDL.Opt(Time),
+  });
   const OrderRecord = IDL.Record({
     'status' : IDL.Text,
+    'invoicePDF' : IDL.Opt(IDL.Vec(IDL.Nat8)),
+    'emptyTruckImage' : IDL.Opt(ExternalBlob),
     'storeId' : IDL.Nat,
+    'loadedTruckImage' : IDL.Opt(IDL.Vec(IDL.Nat8)),
     'rate' : IDL.Float64,
     'orderId' : IDL.Text,
+    'gpsLocation' : IDL.Opt(GpsLocation),
     'notes' : IDL.Text,
+    'barcodeScan' : IDL.Opt(IDL.Text),
     'timestamp' : IDL.Int,
     'quantity' : IDL.Nat,
+    'unloadedTruckImage' : IDL.Opt(IDL.Vec(IDL.Nat8)),
+    'qrCode' : IDL.Opt(QRCodeData),
   });
   const UserProfile = IDL.Record({
     'name' : IDL.Text,
@@ -191,7 +360,39 @@ export const idlFactory = ({ IDL }) => {
   });
   
   return IDL.Service({
+    '_caffeineStorageBlobIsLive' : IDL.Func(
+        [IDL.Vec(IDL.Nat8)],
+        [IDL.Bool],
+        ['query'],
+      ),
+    '_caffeineStorageBlobsToDelete' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Vec(IDL.Nat8))],
+        ['query'],
+      ),
+    '_caffeineStorageConfirmBlobDeletion' : IDL.Func(
+        [IDL.Vec(IDL.Vec(IDL.Nat8))],
+        [],
+        [],
+      ),
+    '_caffeineStorageCreateCertificate' : IDL.Func(
+        [IDL.Text],
+        [_CaffeineStorageCreateCertificateResult],
+        [],
+      ),
+    '_caffeineStorageRefillCashier' : IDL.Func(
+        [IDL.Opt(_CaffeineStorageRefillInformation)],
+        [_CaffeineStorageRefillResult],
+        [],
+      ),
+    '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+    'addEmptyTruckImage' : IDL.Func([IDL.Text, ExternalBlob, IDL.Text], [], []),
+    'addGpsLocation' : IDL.Func(
+        [IDL.Text, IDL.Float64, IDL.Float64, IDL.Text],
+        [],
+        [],
+      ),
     'addStore' : IDL.Func([Store, IDL.Text], [], []),
     'addUser' : IDL.Func(
         [
@@ -205,6 +406,7 @@ export const idlFactory = ({ IDL }) => {
         [User],
         [],
       ),
+    'approveOrder' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
     'createDistributorDelivery' : IDL.Func(
         [DistributorDelivery, IDL.Text],
@@ -215,6 +417,25 @@ export const idlFactory = ({ IDL }) => {
     'deleteDistributorDelivery' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'deleteStore' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'deleteUser' : IDL.Func([IDL.Text, IDL.Text], [], []),
+    'filterOrdersByStatus' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Vec(OrderRecord)],
+        ['query'],
+      ),
+    'getAdminDashboardStats' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Record({
+            'activeDeliveries' : IDL.Nat,
+            'pendingApproval' : IDL.Nat,
+            'deliveredToday' : IDL.Nat,
+            'confirmationsPending' : IDL.Nat,
+            'totalOrdersToday' : IDL.Nat,
+            'trucksInTransit' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
     'getAllDistributorDeliveries' : IDL.Func(
         [IDL.Text],
         [IDL.Vec(DistributorDelivery)],
@@ -225,6 +446,31 @@ export const idlFactory = ({ IDL }) => {
     'getAllUsers' : IDL.Func([IDL.Text], [IDL.Vec(User)], ['query']),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+    'getDeliveryVerificationRecords' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Vec(
+            IDL.Record({
+              'distributor' : IDL.Principal,
+              'emptyTruckImage' : IDL.Opt(ExternalBlob),
+              'loadedTruckImage' : IDL.Opt(IDL.Vec(IDL.Nat8)),
+              'orderId' : IDL.Text,
+              'storeRecord' : IDL.Opt(Store),
+              'storeName' : IDL.Text,
+              'timestamp' : IDL.Int,
+              'orderContents' : IDL.Record({
+                'rate' : IDL.Float64,
+                'notes' : IDL.Text,
+                'quantity' : IDL.Nat,
+              }),
+              'truckNumber' : IDL.Text,
+              'driverName' : IDL.Text,
+              'unloadedTruckImage' : IDL.Opt(IDL.Vec(IDL.Nat8)),
+            })
+          ),
+        ],
+        ['query'],
+      ),
     'getDistributorDeliveriesByUser' : IDL.Func(
         [IDL.Principal, IDL.Text],
         [IDL.Vec(DistributorDelivery)],
@@ -235,9 +481,37 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Opt(DistributorDelivery)],
         ['query'],
       ),
+    'getEmptyTruckImage' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Opt(ExternalBlob)],
+        ['query'],
+      ),
+    'getLiveTrackingData' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Vec(
+            IDL.Record({
+              'status' : IDL.Text,
+              'orderId' : IDL.Text,
+              'location' : IDL.Opt(GpsLocation),
+            })
+          ),
+        ],
+        ['query'],
+      ),
     'getOrder' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Opt(OrderRecord)],
+        ['query'],
+      ),
+    'getOrderWithImages' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Opt(OrderRecord)],
+        ['query'],
+      ),
+    'getOrderWorkflowStatus' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Text],
         ['query'],
       ),
     'getUserProfile' : IDL.Func(
@@ -253,12 +527,22 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+    'submitDistributorConfirmation' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Vec(IDL.Nat8), IDL.Vec(IDL.Nat8), IDL.Text],
+        [],
+        [],
+      ),
     'updateDistributorDelivery' : IDL.Func(
         [IDL.Text, DistributorDelivery, IDL.Text],
         [],
         [],
       ),
     'updateOrder' : IDL.Func([IDL.Text, OrderRecord, IDL.Text], [], []),
+    'updateOrderStatusUsingQR' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [],
+        [],
+      ),
     'updateStore' : IDL.Func([IDL.Nat, Store, IDL.Text], [], []),
     'updateUser' : IDL.Func([IDL.Text, User, IDL.Text], [], []),
   });

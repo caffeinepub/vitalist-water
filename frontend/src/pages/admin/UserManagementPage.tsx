@@ -1,12 +1,20 @@
 import React, { useState } from 'react';
-import { useAllUsers, useAddUser, useUpdateUser, useDeleteUser, AddUserInput } from '../../hooks/useQueries';
-import { useActor } from '../../hooks/useActor';
-import { User, AppUserRole } from '../../backend';
-import { mapAppRoleToBackendRole, mapBackendRoleToAppRole } from '../../hooks/useQueries';
+import { useAuth } from '../../contexts/AuthContext';
+import {
+  useAllUsers,
+  useAddUser,
+  useUpdateUser,
+  useDeleteUser,
+  mapBackendRoleToAppRole,
+  mapAppRoleToBackendRole,
+  AddUserInput,
+} from '../../hooks/useQueries';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog,
   DialogContent,
@@ -31,219 +39,194 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Pencil, Trash2, Search, Loader2, Users } from 'lucide-react';
-import { toast } from 'sonner';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { AlertCircle, Loader2, Plus, Pencil, Trash2 } from 'lucide-react';
+import type { User, AppUserRole } from '../../backend';
 
-type AppRole = 'admin' | 'staff' | 'delivery' | 'distributor';
+const ROLES = ['admin', 'staff', 'delivery', 'distributor'];
 
-const ROLE_OPTIONS: { value: AppRole; label: string }[] = [
-  { value: 'admin', label: 'Admin' },
-  { value: 'staff', label: 'Staff' },
-  { value: 'delivery', label: 'Delivery' },
-  { value: 'distributor', label: 'Distributor' },
-];
+interface UserForm {
+  email: string;
+  password: string;
+  role: string;
+}
 
-const ROLE_LABELS: Record<string, string> = {
-  admin: 'Admin',
-  staff: 'Staff',
-  delivery: 'Delivery',
-  distributor: 'Distributor',
-};
-
-const ROLE_BADGE_VARIANTS: Record<string, string> = {
-  admin: 'bg-primary/10 text-primary',
-  staff: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-  delivery: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
-  distributor: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
-};
-
-const emptyForm = () => ({ email: '', password: '', role: 'staff' as AppRole });
+const emptyForm: UserForm = { email: '', password: '', role: 'staff' };
 
 export default function UserManagementPage() {
-  const { actor, isFetching: actorFetching } = useActor();
-  const { data: users = [], isLoading } = useAllUsers();
+  const { user: currentUser } = useAuth();
+  const email = currentUser?.email ?? '';
+
+  const { data: users = [], isLoading, error } = useAllUsers(email);
   const addUserMutation = useAddUser();
   const updateUserMutation = useUpdateUser();
   const deleteUserMutation = useDeleteUser();
 
-  const actorReady = !!actor && !actorFetching;
-
-  const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [deleteConfirmEmail, setDeleteConfirmEmail] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyForm());
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [form, setForm] = useState<UserForm>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
-
-  const filteredUsers = users.filter(
-    (u) =>
-      u.email.toLowerCase().includes(search.toLowerCase()) ||
-      (u.id && u.id.toLowerCase().includes(search.toLowerCase()))
-  );
+  const [formError, setFormError] = useState('');
 
   const openAdd = () => {
     setEditingUser(null);
-    setForm(emptyForm());
+    setForm(emptyForm);
+    setFormError('');
     setDialogOpen(true);
   };
 
-  const openEdit = (user: User) => {
-    setEditingUser(user);
-    setForm({
-      email: user.email,
-      password: user.hashedPassword,
-      role: mapBackendRoleToAppRole(user.role) as AppRole,
-    });
+  const openEdit = (u: User) => {
+    setEditingUser(u);
+    setForm({ email: u.email, password: '', role: mapBackendRoleToAppRole(u.role) });
+    setFormError('');
     setDialogOpen(true);
   };
 
   const handleSubmit = async () => {
-    if (!form.email.trim() || !form.password.trim()) {
-      toast.error('Email and password are required');
+    if (!form.email.trim()) {
+      setFormError('Email is required.');
+      return;
+    }
+    if (!editingUser && !form.password.trim()) {
+      setFormError('Password is required for new users.');
       return;
     }
     setSubmitting(true);
+    setFormError('');
     try {
-      if (editingUser !== null) {
-        // For update, pass the full User object with the existing id
+      if (editingUser) {
         const updatedUser: User = {
-          id: editingUser.id,
+          ...editingUser,
+          role: mapAppRoleToBackendRole(form.role),
+          hashedPassword: form.password.trim() || editingUser.hashedPassword,
+        };
+        await updateUserMutation.mutateAsync({
           email: editingUser.email,
-          hashedPassword: form.password,
-          role: mapAppRoleToBackendRole(form.role),
-        };
-        await updateUserMutation.mutateAsync({ email: editingUser.email, user: updatedUser });
-        toast.success('User updated successfully');
+          updatedUser,
+          sessionEmail: email,
+        });
       } else {
-        // For add, pass only the input fields — backend generates the id
-        const addInput: AddUserInput = {
-          email: form.email.trim().toLowerCase(),
-          hashedPassword: form.password,
-          role: mapAppRoleToBackendRole(form.role),
+        const userInput: AddUserInput = {
+          email: form.email.trim(),
+          hashedPassword: form.password.trim(),
+          role: mapAppRoleToBackendRole(form.role) as AppUserRole,
         };
-        await addUserMutation.mutateAsync(addInput);
-        toast.success('User added successfully');
+        await addUserMutation.mutateAsync({ userInput, sessionEmail: email });
       }
       setDialogOpen(false);
     } catch (err: any) {
-      const msg = err?.message ?? String(err);
-      if (msg.includes('Unauthorized') || msg.includes('permission')) {
-        toast.error('Permission denied. Please log out and log back in.');
-      } else if (msg.includes('already exists')) {
-        toast.error('A user with this email already exists.');
-      } else {
-        toast.error(`Failed to save user: ${msg}`);
-      }
+      setFormError(err?.message || 'Failed to save user.');
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!deleteConfirmEmail) return;
+    if (!deleteTarget) return;
     try {
-      await deleteUserMutation.mutateAsync(deleteConfirmEmail);
-      toast.success('User deleted successfully');
-    } catch (err: any) {
-      toast.error(`Failed to delete user: ${err?.message ?? err}`);
+      await deleteUserMutation.mutateAsync({ email: deleteTarget, sessionEmail: email });
+    } catch (err) {
+      console.error('Delete user error:', err);
     } finally {
-      setDeleteConfirmEmail(null);
+      setDeleteTarget(null);
     }
   };
 
-  return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">User Management</h1>
-          <p className="text-muted-foreground text-sm mt-1">Manage system users and their roles</p>
+  const getRoleBadgeVariant = (role: string): 'default' | 'secondary' | 'outline' => {
+    switch (role) {
+      case 'admin': return 'default';
+      case 'staff': return 'secondary';
+      default: return 'outline';
+    }
+  };
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="flex items-center gap-2 text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+          <AlertCircle className="h-5 w-5 shrink-0" />
+          <p>Failed to load users. Please try again.</p>
         </div>
-        <Button onClick={openAdd} disabled={!actorReady} className="gap-2">
-          {actorFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-foreground">User Management</h1>
+        <Button onClick={openAdd}>
+          <Plus className="h-4 w-4 mr-2" />
           Add User
         </Button>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Search users by email or ID..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-        />
-      </div>
-
-      <Card className="card-shadow">
-        <CardHeader>
-          <CardTitle className="text-base">Users ({filteredUsers.length})</CardTitle>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">
+            Users{' '}
+            <span className="text-muted-foreground font-normal text-sm">({users.length})</span>
+          </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {isLoading || actorFetching ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          {isLoading ? (
+            <div className="p-4 space-y-2">
+              {[...Array(4)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
             </div>
-          ) : filteredUsers.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <Users className="w-8 h-8 mx-auto mb-2 opacity-40" />
-              No users found
+          ) : users.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground">
+              <p className="text-sm">No users found.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[180px]">User ID</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Role</TableHead>
-                    <TableHead className="w-[100px]">Actions</TableHead>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUsers.map((user) => {
-                    const appRole = mapBackendRoleToAppRole(user.role);
-                    return (
-                      <TableRow key={user.email}>
-                        <TableCell>
-                          <span className="font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
-                            {user.id || <span className="italic opacity-50">—</span>}
-                          </span>
-                        </TableCell>
-                        <TableCell className="font-medium">{user.email}</TableCell>
-                        <TableCell>
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              ROLE_BADGE_VARIANTS[appRole] ?? 'bg-muted text-muted-foreground'
-                            }`}
+                  {users.map((u) => (
+                    <TableRow key={u.id}>
+                      <TableCell className="font-medium">{u.email}</TableCell>
+                      <TableCell>
+                        <Badge variant={getRoleBadgeVariant(mapBackendRoleToAppRole(u.role))}>
+                          {mapBackendRoleToAppRole(u.role)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground font-mono">
+                        {u.id}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button size="sm" variant="outline" onClick={() => openEdit(u)}>
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => setDeleteTarget(u.email)}
+                            disabled={u.email === email}
                           >
-                            {ROLE_LABELS[appRole] ?? appRole}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => openEdit(user)}
-                              disabled={!actorReady}
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="text-destructive hover:text-destructive"
-                              onClick={() => setDeleteConfirmEmail(user.email)}
-                              disabled={!actorReady}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </div>
@@ -252,84 +235,81 @@ export default function UserManagementPage() {
       </Card>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(o) => !submitting && setDialogOpen(o)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingUser !== null ? 'Edit User' : 'Add New User'}</DialogTitle>
+            <DialogTitle>{editingUser ? 'Edit User' : 'Add User'}</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-2">
-            {editingUser && (
-              <div className="grid gap-1.5">
-                <Label className="text-muted-foreground text-xs">User ID</Label>
-                <p className="font-mono text-xs bg-muted px-3 py-2 rounded border border-border">
-                  {editingUser.id}
-                </p>
-              </div>
-            )}
-            <div className="grid gap-1.5">
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
               <Label>Email *</Label>
               <Input
                 type="email"
                 value={form.email}
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                disabled={editingUser !== null}
-                placeholder="user@example.com"
+                placeholder="user@vitalist.com"
+                disabled={!!editingUser}
               />
             </div>
-            <div className="grid gap-1.5">
-              <Label>Password *</Label>
+            <div className="space-y-1">
+              <Label>{editingUser ? 'New Password (leave blank to keep)' : 'Password *'}</Label>
               <Input
-                type="text"
+                type="password"
                 value={form.password}
                 onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                placeholder="Enter password"
+                placeholder="••••••••"
               />
             </div>
-            <div className="grid gap-1.5">
-              <Label>Role *</Label>
-              <Select
-                value={form.role}
-                onValueChange={(val) => setForm((f) => ({ ...f, role: val as AppRole }))}
-              >
+            <div className="space-y-1">
+              <Label>Role</Label>
+              <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v }))}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select role" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {ROLE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
+                  {ROLES.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r.charAt(0).toUpperCase() + r.slice(1)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+            {formError && <p className="text-sm text-destructive">{formError}</p>}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={submitting}>
               Cancel
             </Button>
             <Button onClick={handleSubmit} disabled={submitting}>
-              {submitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              {editingUser !== null ? 'Update' : 'Add'} User
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Saving…
+                </>
+              ) : editingUser ? (
+                'Update User'
+              ) : (
+                'Add User'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirm */}
-      <AlertDialog open={deleteConfirmEmail !== null} onOpenChange={(o) => !o && setDeleteConfirmEmail(null)}>
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete User</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete <strong>{deleteConfirmEmail}</strong>? This action cannot be undone.
+              Are you sure you want to delete <strong>{deleteTarget}</strong>? This action cannot be
+              undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
-              Delete
-            </AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

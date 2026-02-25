@@ -1,12 +1,12 @@
 # Specification
 
 ## Summary
-**Goal:** Fix two bugs affecting newly created users: missing user ID display in the admin panel and inability to log in after creation.
+**Goal:** Fix the blank page crash that occurs after deployment by diagnosing runtime errors, adding an error boundary, and ensuring all components have proper Suspense boundaries.
 
 **Planned changes:**
-- Fix the backend `addUser` function in `main.mo` to generate and persist a valid unique user ID for every new user, and return it in the response.
-- Fix the `UserManagementPage.tsx` user table to correctly display the user ID for newly created users, including re-fetching the user list via React Query invalidation after a successful add.
-- Fix the backend `login` function in `main.mo` to look up users by email across the full users map (including dynamically added users), verify passwords correctly, and return a valid session token and role.
-- Fix `AuthContext.tsx` to correctly process the login response and store the token and role in sessionStorage for newly created users.
+- Audit `App.tsx` for runtime errors including undefined variable access, failed imports, missing null guards on authentication state, and role-based routing logic that may throw before rendering
+- Ensure the app renders a visible UI for all authentication states (unauthenticated, loading, authenticated with any role)
+- Add a top-level `ErrorBoundary` component wrapping the entire React app that displays a user-friendly fallback UI with the app name, an error message, and a reload button
+- Wrap all dynamically imported/lazy-loaded components (SatelliteMapView, QRScanModal, BarcodeScanStep, etc.) with `React.Suspense` and loading fallbacks
 
-**User-visible outcome:** After an admin creates a new user, the user's ID appears immediately in the user table. The newly created user can then log in with their credentials and be routed to the appropriate dashboard for their role.
+**User-visible outcome:** After deployment, the app consistently displays either the login page or the appropriate dashboard instead of a blank page, and any unexpected render errors show a friendly fallback UI with a reload button rather than a blank screen.
