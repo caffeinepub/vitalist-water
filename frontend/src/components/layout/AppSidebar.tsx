@@ -46,8 +46,8 @@ interface AppSidebarProps {
 }
 
 export default function AppSidebar({ currentPage, onNavigate }: AppSidebarProps) {
-  const { currentUser } = useAuth();
-  const role = currentUser?.role as AppRole | undefined;
+  const { user } = useAuth();
+  const role = user?.role as AppRole | undefined;
 
   const visibleItems = NAV_ITEMS.filter(
     (item) => role && item.roles.includes(role)
@@ -63,7 +63,7 @@ export default function AppSidebar({ currentPage, onNavigate }: AppSidebarProps)
     <div className="flex flex-col h-full">
       {/* Brand */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border">
-        <div className="w-9 h-9 rounded-xl bg-aqua-500 flex items-center justify-center flex-shrink-0">
+        <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center shrink-0">
           <Droplets className="h-5 w-5 text-white" />
         </div>
         <div>
@@ -75,9 +75,9 @@ export default function AppSidebar({ currentPage, onNavigate }: AppSidebarProps)
       {/* Role badge */}
       <div className="px-4 py-3">
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-sidebar-accent/50">
-          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${roleDotColor}`} />
+          <div className={`w-2 h-2 rounded-full shrink-0 ${roleDotColor}`} />
           <span className="text-xs font-medium text-sidebar-foreground capitalize">{role}</span>
-          <span className="text-xs text-sidebar-foreground opacity-50 ml-auto truncate">{currentUser?.name}</span>
+          <span className="text-xs text-sidebar-foreground opacity-50 ml-auto truncate">{user?.name}</span>
         </div>
       </div>
 
@@ -91,7 +91,7 @@ export default function AppSidebar({ currentPage, onNavigate }: AppSidebarProps)
               currentPage === item.id ? 'active' : ''
             }`}
           >
-            <span className="flex-shrink-0">{item.icon}</span>
+            <span className="shrink-0">{item.icon}</span>
             <span>{item.label}</span>
           </button>
         ))}

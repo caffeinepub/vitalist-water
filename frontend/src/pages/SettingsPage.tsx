@@ -4,12 +4,13 @@ import { Button } from '@/components/ui/button';
 import { LogOut, User, Shield, Info, Droplets, Heart } from 'lucide-react';
 
 export default function SettingsPage() {
-  const { currentUser, logout } = useAuth();
+  const { user, logout } = useAuth();
 
   const roleLabels: Record<string, string> = {
     admin: 'Administrator',
     staff: 'Staff',
     delivery: 'Delivery',
+    distributor: 'Distributor',
   };
 
   return (
@@ -28,23 +29,23 @@ export default function SettingsPage() {
         <div className="space-y-3">
           <div className="flex items-center justify-between py-2 border-b border-border">
             <span className="text-sm text-muted-foreground">Name</span>
-            <span className="text-sm font-medium text-foreground">{currentUser?.name}</span>
+            <span className="text-sm font-medium text-foreground">{user?.name}</span>
           </div>
           <div className="flex items-center justify-between py-2 border-b border-border">
             <span className="text-sm text-muted-foreground">Email</span>
-            <span className="text-sm font-medium text-foreground">{currentUser?.email}</span>
+            <span className="text-sm font-medium text-foreground">{user?.email}</span>
           </div>
           <div className="flex items-center justify-between py-2">
             <span className="text-sm text-muted-foreground">Role</span>
             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
-              currentUser?.role === 'admin'
+              user?.role === 'admin'
                 ? 'bg-green-100 text-green-800 border-green-200'
-                : currentUser?.role === 'staff'
+                : user?.role === 'staff'
                 ? 'bg-amber-100 text-amber-800 border-amber-200'
                 : 'bg-blue-100 text-blue-800 border-blue-200'
             }`}>
               <Shield className="h-3 w-3" />
-              {roleLabels[currentUser?.role ?? ''] ?? currentUser?.role}
+              {roleLabels[user?.role ?? ''] ?? user?.role}
             </span>
           </div>
         </div>

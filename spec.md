@@ -1,14 +1,12 @@
 # Specification
 
 ## Summary
-**Goal:** Add a Distributor Delivery Data management system (Admin creates records, Distributors view their assignments and mark truck arrival), and fix the broken map functionality in the Add/Edit Store dialog.
+**Goal:** Fix two bugs affecting newly created users: missing user ID display in the admin panel and inability to log in after creation.
 
 **Planned changes:**
-- Add a "Distributor Delivery Data" section in the Admin panel with a form to create, edit, and delete delivery records (fields: Order ID, Truck Number, Driver Name, Driver Contact Number, Distributor, Estimated Delivery Date/Time, Notes).
-- Store distributor delivery records in a stable backend data structure with role-based access control; expose queries for all records (admin) and filtered by distributor user ID (distributor role).
-- Add a Distributor Dashboard page accessible only to users with the "distributor" role, displaying their assigned delivery records as cards/rows with Order ID, Store Name, Truck Number, Driver Name, Driver Contact, Estimated Delivery Date/Time, and Order Status.
-- Add a "Mark Truck Arrived" button on each distributor delivery card that updates the record status server-side; button is disabled after already marked.
-- Restrict Distributor Dashboard navigation so distributor-role users only see the Distributor Dashboard nav item in the sidebar.
-- Fix the Add Store / Edit Store map in StoreManagementPage.tsx: replace broken map tile dependency with an OpenStreetMap iframe embed or Leaflet/static map fallback; ensure "Use Current Location" populates latitude/longitude fields and updates the map preview; ensure manual lat/lng edits sync with the map in real time.
+- Fix the backend `addUser` function in `main.mo` to generate and persist a valid unique user ID for every new user, and return it in the response.
+- Fix the `UserManagementPage.tsx` user table to correctly display the user ID for newly created users, including re-fetching the user list via React Query invalidation after a successful add.
+- Fix the backend `login` function in `main.mo` to look up users by email across the full users map (including dynamically added users), verify passwords correctly, and return a valid session token and role.
+- Fix `AuthContext.tsx` to correctly process the login response and store the token and role in sessionStorage for newly created users.
 
-**User-visible outcome:** Admins can manage distributor delivery assignments from the Admin panel; distributors can log in to their dedicated dashboard to view their deliveries and mark when a truck has arrived. The Add/Edit Store map works correctly in all modern browsers without errors.
+**User-visible outcome:** After an admin creates a new user, the user's ID appears immediately in the user table. The newly created user can then log in with their credentials and be routed to the appropriate dashboard for their role.

@@ -1,6 +1,12 @@
 import React, { useState } from 'react';
-import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Loader2, Truck, Package, Phone, User, Calendar, FileText } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import {
+  useAllDistributorDeliveries,
+  useCreateDistributorDelivery,
+  useUpdateDistributorDelivery,
+  useDeleteDistributorDelivery,
+  useAllOrders,
+} from '../../hooks/useQueries';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,16 +19,6 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import {
   Table,
   TableBody,
@@ -38,461 +34,376 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import {
-  useGetAllDistributorDeliveries,
-  useCreateDistributorDelivery,
-  useUpdateDistributorDelivery,
-  useDeleteDistributorDelivery,
-  useGetAllOrders,
-  useGetAllUsers,
-} from '../../hooks/useQueries';
-import type { DistributorDelivery } from '../../backend';
-import { Principal } from '@icp-sdk/core/principal';
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Loader2, Plus, Pencil, Trash2, Truck } from 'lucide-react';
+import { useActor } from '../../hooks/useActor';
+import { Principal } from '@dfinity/principal';
+import { toast } from 'sonner';
 
-const emptyForm = {
+interface DeliveryFormData {
+  deliveryId: string;
+  orderId: string;
+  truckNumber: string;
+  driverName: string;
+  driverContact: string;
+  distributorPrincipal: string;
+  estimatedDeliveryTime: string;
+  notes: string;
+}
+
+const defaultForm: DeliveryFormData = {
+  deliveryId: '',
   orderId: '',
   truckNumber: '',
   driverName: '',
   driverContact: '',
-  distributorEmail: '',
   distributorPrincipal: '',
   estimatedDeliveryTime: '',
   notes: '',
 };
 
-type DeliveryForm = typeof emptyForm;
-
 function generateDeliveryId(): string {
-  return `DEL-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-}
-
-function formatDateTime(timestamp: bigint): string {
-  try {
-    const ms = Number(timestamp) / 1_000_000;
-    return new Date(ms).toLocaleString();
-  } catch {
-    return '—';
-  }
-}
-
-function datetimeLocalToNano(value: string): bigint {
-  const ms = new Date(value).getTime();
-  return BigInt(ms) * BigInt(1_000_000);
-}
-
-function nanoToDatetimeLocal(nano: bigint): string {
-  try {
-    const ms = Number(nano) / 1_000_000;
-    const d = new Date(ms);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  } catch {
-    return '';
-  }
+  return `DEL-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
 }
 
 export default function DistributorDeliveryManagementPage() {
-  const { data: deliveries = [], isLoading } = useGetAllDistributorDeliveries();
-  const { data: orders = [] } = useGetAllOrders();
-  const { data: users = [] } = useGetAllUsers();
+  const { isAdmin } = useAuth();
+  const { actor, isFetching: actorFetching } = useActor();
 
-  const createDelivery = useCreateDistributorDelivery();
-  const updateDelivery = useUpdateDistributorDelivery();
-  const deleteDelivery = useDeleteDistributorDelivery();
+  const { data: deliveries = [], isLoading, error } = useAllDistributorDeliveries();
+  const { data: orders = [] } = useAllOrders();
+  const createMutation = useCreateDistributorDelivery();
+  const updateMutation = useUpdateDistributorDelivery();
+  const deleteMutation = useDeleteDistributorDelivery();
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [editingDelivery, setEditingDelivery] = useState<DistributorDelivery | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [form, setForm] = useState<DeliveryForm>(emptyForm);
-  const [search, setSearch] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<DeliveryFormData>(defaultForm);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const isMutating = createDelivery.isPending || updateDelivery.isPending;
+  const actorReady = !!actor && !actorFetching;
+  const approvedOrders = orders.filter((o) => o.status === 'Approved');
 
-  // Filter users with distributor role
-  const distributorUsers = users.filter((u) => u.role === 'guest' || (u as any).role === 'distributor');
-
-  // Filter approved orders
-  const approvedOrders = orders.filter((o) => o.status === 'approved' || o.status === 'pending');
-
-  const openAdd = () => {
-    setEditingDelivery(null);
-    setForm(emptyForm);
+  const openAddDialog = () => {
+    setEditingId(null);
+    setForm({ ...defaultForm, deliveryId: generateDeliveryId() });
+    setFormError(null);
     setDialogOpen(true);
   };
 
-  const openEdit = (delivery: DistributorDelivery) => {
-    setEditingDelivery(delivery);
+  const openEditDialog = (deliveryId: string) => {
+    const delivery = deliveries.find((d) => d.deliveryId === deliveryId);
+    if (!delivery) return;
+    setEditingId(deliveryId);
     setForm({
+      deliveryId: delivery.deliveryId,
       orderId: delivery.orderId,
       truckNumber: delivery.truckNumber,
       driverName: delivery.driverName,
       driverContact: delivery.driverContact,
-      distributorEmail: '',
       distributorPrincipal: delivery.distributor.toString(),
-      estimatedDeliveryTime: nanoToDatetimeLocal(delivery.estimatedDeliveryTime),
+      estimatedDeliveryTime: new Date(Number(delivery.estimatedDeliveryTime) / 1_000_000)
+        .toISOString()
+        .slice(0, 16),
       notes: delivery.notes,
     });
+    setFormError(null);
     setDialogOpen(true);
   };
 
-  const openDelete = (deliveryId: string) => {
-    setDeletingId(deliveryId);
-    setDeleteDialogOpen(true);
-  };
+  const handleSubmit = async () => {
+    setFormError(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.orderId || !form.truckNumber.trim() || !form.driverName.trim() || !form.driverContact.trim() || !form.distributorPrincipal || !form.estimatedDeliveryTime) {
-      toast.error('Please fill in all required fields');
+    if (!actorReady) {
+      setFormError('System is still initializing. Please wait a moment and try again.');
+      return;
+    }
+
+    if (!form.orderId || !form.truckNumber.trim() || !form.driverName.trim()) {
+      setFormError('Order, truck number, and driver name are required.');
       return;
     }
 
     let distributorPrincipal: Principal;
     try {
-      distributorPrincipal = Principal.fromText(form.distributorPrincipal);
+      distributorPrincipal = form.distributorPrincipal
+        ? Principal.fromText(form.distributorPrincipal)
+        : Principal.anonymous();
     } catch {
-      toast.error('Invalid distributor principal ID');
+      setFormError('Invalid distributor principal ID.');
       return;
     }
 
-    const deliveryData: DistributorDelivery = {
-      deliveryId: editingDelivery ? editingDelivery.deliveryId : generateDeliveryId(),
+    const estimatedTime = form.estimatedDeliveryTime
+      ? BigInt(new Date(form.estimatedDeliveryTime).getTime()) * BigInt(1_000_000)
+      : BigInt(Date.now()) * BigInt(1_000_000);
+
+    const deliveryData = {
+      deliveryId: form.deliveryId,
       orderId: form.orderId,
       truckNumber: form.truckNumber.trim(),
       driverName: form.driverName.trim(),
       driverContact: form.driverContact.trim(),
       distributor: distributorPrincipal,
-      estimatedDeliveryTime: datetimeLocalToNano(form.estimatedDeliveryTime),
+      estimatedDeliveryTime: estimatedTime,
       notes: form.notes.trim(),
     };
 
     try {
-      if (editingDelivery) {
-        await updateDelivery.mutateAsync({ deliveryId: editingDelivery.deliveryId, delivery: deliveryData });
-        toast.success('Delivery record updated successfully');
+      if (editingId !== null) {
+        await updateMutation.mutateAsync({ deliveryId: editingId, delivery: deliveryData });
+        toast.success('Delivery updated successfully');
       } else {
-        await createDelivery.mutateAsync(deliveryData);
-        toast.success('Delivery record created successfully');
+        await createMutation.mutateAsync(deliveryData);
+        toast.success('Delivery created successfully');
       }
       setDialogOpen(false);
-      setForm(emptyForm);
-    } catch (err: any) {
-      const msg = err?.message || String(err);
-      if (msg.includes('Unauthorized') || msg.includes('Only admins')) {
-        toast.error('Permission denied: Only admins can manage delivery records.');
-      } else {
-        toast.error(`Failed: ${msg}`);
-      }
+      setForm(defaultForm);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setFormError(msg.includes('Permission') ? 'Permission denied. Ensure you are logged in as admin.' : msg);
     }
   };
 
   const handleDelete = async () => {
-    if (!deletingId) return;
+    if (!deleteConfirmId) return;
     try {
-      await deleteDelivery.mutateAsync(deletingId);
-      toast.success('Delivery record deleted successfully');
-      setDeleteDialogOpen(false);
-      setDeletingId(null);
-    } catch (err: any) {
-      const msg = err?.message || String(err);
-      toast.error(`Failed to delete: ${msg}`);
+      await deleteMutation.mutateAsync(deleteConfirmId);
+      toast.success('Delivery deleted successfully');
+    } catch (err: unknown) {
+      toast.error('Delete failed: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setDeleteConfirmId(null);
     }
   };
 
-  const filteredDeliveries = deliveries.filter(
-    (d) =>
-      d.deliveryId.toLowerCase().includes(search.toLowerCase()) ||
-      d.orderId.toLowerCase().includes(search.toLowerCase()) ||
-      d.truckNumber.toLowerCase().includes(search.toLowerCase()) ||
-      d.driverName.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const getOrderStatus = (orderId: string) => {
-    const order = orders.find((o) => o.orderId === orderId);
-    return order?.status || 'unknown';
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'approved': return 'default';
-      case 'pending': return 'secondary';
-      case 'delivered': return 'outline';
-      case 'cancelled': return 'destructive';
-      default: return 'secondary';
-    }
-  };
+  const isMutating = createMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Distributor Deliveries</h1>
-          <p className="text-muted-foreground text-sm mt-1">Manage distributor delivery assignments</p>
+        <div className="flex items-center gap-3">
+          <Truck className="h-6 w-6 text-primary" />
+          <div>
+            <h1 className="text-2xl font-bold">Distributor Deliveries</h1>
+            <p className="text-sm text-muted-foreground">Manage distributor delivery assignments</p>
+          </div>
         </div>
-        <Button onClick={openAdd} className="gap-2">
-          <Plus className="w-4 h-4" />
-          Add Delivery
+        <Button
+          onClick={openAddDialog}
+          disabled={!actorReady || !isAdmin}
+          className="flex items-center gap-2"
+        >
+          {actorFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          Create Delivery
         </Button>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between gap-4">
-            <CardTitle className="text-base">
-              All Deliveries ({filteredDeliveries.length})
-            </CardTitle>
-            <Input
-              placeholder="Search deliveries..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-xs"
-            />
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : filteredDeliveries.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
-              <Truck className="w-10 h-10 opacity-30" />
-              <p className="text-sm">No delivery records found</p>
-              <Button variant="outline" size="sm" onClick={openAdd} className="mt-2">
-                Add first delivery record
-              </Button>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Delivery ID</TableHead>
-                    <TableHead>Order ID</TableHead>
-                    <TableHead>Truck No.</TableHead>
-                    <TableHead>Driver</TableHead>
-                    <TableHead>Contact</TableHead>
-                    <TableHead>Est. Delivery</TableHead>
-                    <TableHead>Order Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+      {/* Deliveries Table */}
+      {isLoading || actorFetching ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : error ? (
+        <Alert variant="destructive">
+          <AlertDescription>
+            Failed to load deliveries: {(error as Error).message}
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <div className="rounded-lg border bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Delivery ID</TableHead>
+                <TableHead>Order ID</TableHead>
+                <TableHead>Truck</TableHead>
+                <TableHead>Driver</TableHead>
+                <TableHead>Contact</TableHead>
+                <TableHead>Est. Delivery</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {deliveries.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                    No deliveries found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                deliveries.map((delivery) => (
+                  <TableRow key={delivery.deliveryId}>
+                    <TableCell className="font-mono text-sm">{delivery.deliveryId}</TableCell>
+                    <TableCell className="font-mono text-sm">{delivery.orderId}</TableCell>
+                    <TableCell>{delivery.truckNumber}</TableCell>
+                    <TableCell>{delivery.driverName}</TableCell>
+                    <TableCell>{delivery.driverContact}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(Number(delivery.estimatedDeliveryTime) / 1_000_000).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEditDialog(delivery.deliveryId)}
+                          disabled={!actorReady || !isAdmin || isMutating}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeleteConfirmId(delivery.deliveryId)}
+                          disabled={!actorReady || !isAdmin || isMutating}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredDeliveries.map((delivery) => (
-                    <TableRow key={delivery.deliveryId}>
-                      <TableCell className="font-mono text-xs">{delivery.deliveryId}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="font-mono text-xs">
-                          {delivery.orderId}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1 text-sm font-medium">
-                          <Truck className="w-3 h-3 text-muted-foreground" />
-                          {delivery.truckNumber}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1 text-sm">
-                          <User className="w-3 h-3 text-muted-foreground" />
-                          {delivery.driverName}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1 text-sm">
-                          <Phone className="w-3 h-3 text-muted-foreground" />
-                          {delivery.driverContact}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {formatDateTime(delivery.estimatedDeliveryTime)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={getStatusColor(getOrderStatus(delivery.orderId)) as any}>
-                          {getOrderStatus(delivery.orderId)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openEdit(delivery)}
-                            className="h-8 w-8"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openDelete(delivery.deliveryId)}
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editingDelivery ? 'Edit Delivery Record' : 'Add Distributor Delivery'}</DialogTitle>
+            <DialogTitle>{editingId !== null ? 'Edit Delivery' : 'Create Delivery'}</DialogTitle>
             <DialogDescription>
-              {editingDelivery ? 'Update delivery assignment details' : 'Assign a delivery to a distributor'}
+              {editingId !== null
+                ? 'Update delivery details below.'
+                : 'Fill in the details for the new delivery assignment.'}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Order ID */}
+          <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto pr-1">
+            {formError && (
+              <Alert variant="destructive">
+                <AlertDescription>{formError}</AlertDescription>
+              </Alert>
+            )}
             <div className="space-y-2">
-              <Label htmlFor="orderId">Order ID *</Label>
+              <Label>Delivery ID</Label>
+              <Input value={form.deliveryId} disabled className="bg-muted" />
+            </div>
+            <div className="space-y-2">
+              <Label>Order *</Label>
               <Select
                 value={form.orderId}
-                onValueChange={(val) => setForm({ ...form, orderId: val })}
+                onValueChange={(val) => setForm((f) => ({ ...f, orderId: val }))}
               >
-                <SelectTrigger id="orderId">
-                  <SelectValue placeholder="Select an order" />
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an approved order" />
                 </SelectTrigger>
                 <SelectContent>
-                  {orders.length === 0 ? (
-                    <SelectItem value="__none__" disabled>No orders available</SelectItem>
+                  {approvedOrders.length === 0 ? (
+                    <SelectItem value="_none" disabled>No approved orders available</SelectItem>
                   ) : (
-                    orders.map((order) => (
-                      <SelectItem key={order.orderId} value={order.orderId}>
-                        {order.orderId} — {order.status}
+                    approvedOrders.map((o) => (
+                      <SelectItem key={o.orderId} value={o.orderId}>
+                        {o.orderId} — Qty: {Number(o.quantity)}
                       </SelectItem>
                     ))
                   )}
                 </SelectContent>
               </Select>
             </div>
-
-            {/* Distributor Principal */}
             <div className="space-y-2">
-              <Label htmlFor="distributorPrincipal">Distributor Principal ID *</Label>
+              <Label>Truck Number *</Label>
               <Input
-                id="distributorPrincipal"
-                value={form.distributorPrincipal}
-                onChange={(e) => setForm({ ...form, distributorPrincipal: e.target.value })}
-                placeholder="e.g. aaaaa-aa or principal ID"
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                Enter the Internet Identity principal ID of the distributor
-              </p>
-            </div>
-
-            {/* Truck Number */}
-            <div className="space-y-2">
-              <Label htmlFor="truckNumber">Truck Number *</Label>
-              <Input
-                id="truckNumber"
                 value={form.truckNumber}
-                onChange={(e) => setForm({ ...form, truckNumber: e.target.value })}
-                placeholder="e.g. MH-01-AB-1234"
-                required
+                onChange={(e) => setForm((f) => ({ ...f, truckNumber: e.target.value }))}
+                placeholder="e.g. KA-01-AB-1234"
               />
             </div>
-
-            {/* Driver Name */}
             <div className="space-y-2">
-              <Label htmlFor="driverName">Driver Name *</Label>
+              <Label>Driver Name *</Label>
               <Input
-                id="driverName"
                 value={form.driverName}
-                onChange={(e) => setForm({ ...form, driverName: e.target.value })}
-                placeholder="Full name"
-                required
+                onChange={(e) => setForm((f) => ({ ...f, driverName: e.target.value }))}
+                placeholder="Enter driver name"
               />
             </div>
-
-            {/* Driver Contact */}
             <div className="space-y-2">
-              <Label htmlFor="driverContact">Driver Contact Number *</Label>
+              <Label>Driver Contact</Label>
               <Input
-                id="driverContact"
-                type="tel"
                 value={form.driverContact}
-                onChange={(e) => setForm({ ...form, driverContact: e.target.value })}
-                placeholder="+91 98765 43210"
-                required
+                onChange={(e) => setForm((f) => ({ ...f, driverContact: e.target.value }))}
+                placeholder="Enter contact number"
               />
             </div>
-
-            {/* Estimated Delivery Time */}
             <div className="space-y-2">
-              <Label htmlFor="estimatedDeliveryTime">Estimated Delivery Date & Time *</Label>
+              <Label>Distributor Principal ID</Label>
               <Input
-                id="estimatedDeliveryTime"
+                value={form.distributorPrincipal}
+                onChange={(e) => setForm((f) => ({ ...f, distributorPrincipal: e.target.value }))}
+                placeholder="Leave blank for anonymous"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Estimated Delivery Time</Label>
+              <Input
                 type="datetime-local"
                 value={form.estimatedDeliveryTime}
-                onChange={(e) => setForm({ ...form, estimatedDeliveryTime: e.target.value })}
-                required
+                onChange={(e) => setForm((f) => ({ ...f, estimatedDeliveryTime: e.target.value }))}
               />
             </div>
-
-            {/* Notes */}
             <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
+              <Label>Notes</Label>
               <Textarea
-                id="notes"
                 value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                placeholder="Any additional notes..."
-                rows={3}
+                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                placeholder="Optional notes"
+                rows={2}
               />
             </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={isMutating}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isMutating}>
-                {isMutating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : editingDelivery ? 'Update Delivery' : 'Create Delivery'}
-              </Button>
-            </DialogFooter>
-          </form>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isMutating}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit} disabled={isMutating || !actorReady}>
+              {isMutating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Saving...
+                </>
+              ) : editingId !== null ? 'Save Changes' : 'Create Delivery'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Delete Confirmation */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      <AlertDialog open={deleteConfirmId !== null} onOpenChange={(o) => !o && setDeleteConfirmId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Delivery Record</AlertDialogTitle>
+            <AlertDialogTitle>Delete Delivery</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this delivery record? This action cannot be undone.
+              Are you sure you want to delete this delivery assignment? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteDelivery.isPending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              disabled={deleteDelivery.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteDelivery.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Deleting...
-                </>
-              ) : 'Delete'}
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

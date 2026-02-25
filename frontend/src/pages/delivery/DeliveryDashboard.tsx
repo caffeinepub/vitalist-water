@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useGetAllOrders, useGetAllStores, useUpdateOrder } from '../../hooks/useQueries';
+import { useAllOrders, useAllStores, useUpdateOrder } from '../../hooks/useQueries';
 import { Button } from '@/components/ui/button';
 import StatusBadge from '../../components/orders/StatusBadge';
 import QRScanModal from '../../components/qr/QRScanModal';
-import { Truck, MapPin, Navigation, ScanLine, Loader2, Package, Phone } from 'lucide-react';
+import { Truck, MapPin, Navigation, ScanLine, Loader2, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 import { parseOrderMeta, buildNotesWithMeta } from '../../utils/orderUtils';
 import { getCurrentPosition } from '../../utils/geoUtils';
@@ -22,8 +22,8 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): 
 }
 
 export default function DeliveryDashboard() {
-  const { data: orders = [], isLoading } = useGetAllOrders();
-  const { data: stores = [] } = useGetAllStores();
+  const { data: orders = [], isLoading } = useAllOrders();
+  const { data: stores = [] } = useAllStores();
   const updateOrder = useUpdateOrder();
 
   const [userLat, setUserLat] = useState<number | null>(null);

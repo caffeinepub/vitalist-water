@@ -28,7 +28,8 @@ export interface OrderRecord {
     quantity: bigint;
 }
 export interface User {
-    role: UserRole;
+    id: string;
+    role: AppUserRole;
     email: string;
     hashedPassword: string;
 }
@@ -47,35 +48,49 @@ export interface UserProfile {
     role: string;
     email: string;
 }
+export enum AppUserRole {
+    admin = "admin",
+    distributor = "distributor",
+    staff = "staff",
+    delivery = "delivery"
+}
 export enum UserRole {
     admin = "admin",
     user = "user",
     guest = "guest"
 }
 export interface backendInterface {
-    addStore(store: Store): Promise<void>;
-    addUser(user: User): Promise<void>;
+    addStore(store: Store, sessionEmail: string): Promise<void>;
+    addUser(userInput: {
+        role: AppUserRole;
+        email: string;
+        hashedPassword: string;
+    }, sessionEmail: string): Promise<User>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
-    createDistributorDelivery(delivery: DistributorDelivery): Promise<void>;
-    createOrder(order: OrderRecord): Promise<void>;
-    deleteDistributorDelivery(deliveryId: string): Promise<void>;
-    deleteStore(id: bigint): Promise<void>;
-    deleteUser(email: string): Promise<void>;
-    getAllDistributorDeliveries(): Promise<Array<DistributorDelivery>>;
-    getAllOrders(): Promise<Array<OrderRecord>>;
-    getAllStores(): Promise<Array<Store>>;
-    getAllUsers(): Promise<Array<User>>;
+    createDistributorDelivery(delivery: DistributorDelivery, sessionEmail: string): Promise<void>;
+    createOrder(order: OrderRecord, sessionEmail: string): Promise<void>;
+    deleteDistributorDelivery(deliveryId: string, sessionEmail: string): Promise<void>;
+    deleteStore(id: bigint, sessionEmail: string): Promise<void>;
+    deleteUser(email: string, sessionEmail: string): Promise<void>;
+    getAllDistributorDeliveries(sessionEmail: string): Promise<Array<DistributorDelivery>>;
+    getAllOrders(sessionEmail: string): Promise<Array<OrderRecord>>;
+    getAllStores(sessionEmail: string): Promise<Array<Store>>;
+    getAllUsers(sessionEmail: string): Promise<Array<User>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
-    getDistributorDeliveriesByUser(distributor: Principal): Promise<Array<DistributorDelivery>>;
-    getDistributorDelivery(deliveryId: string): Promise<DistributorDelivery | null>;
-    getOrder(orderId: string): Promise<OrderRecord | null>;
+    getDistributorDeliveriesByUser(distributor: Principal, sessionEmail: string): Promise<Array<DistributorDelivery>>;
+    getDistributorDelivery(deliveryId: string, sessionEmail: string): Promise<DistributorDelivery | null>;
+    getOrder(orderId: string, sessionEmail: string): Promise<OrderRecord | null>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     initializeSystem(): Promise<void>;
     isCallerAdmin(): Promise<boolean>;
+    login(email: string, hashedPassword: string): Promise<{
+        token: string;
+        role: string;
+    } | null>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
-    updateDistributorDelivery(deliveryId: string, updatedDelivery: DistributorDelivery): Promise<void>;
-    updateOrder(orderId: string, updatedOrder: OrderRecord): Promise<void>;
-    updateStore(id: bigint, store: Store): Promise<void>;
-    updateUser(email: string, updatedUser: User): Promise<void>;
+    updateDistributorDelivery(deliveryId: string, updatedDelivery: DistributorDelivery, sessionEmail: string): Promise<void>;
+    updateOrder(orderId: string, updatedOrder: OrderRecord, sessionEmail: string): Promise<void>;
+    updateStore(id: bigint, store: Store, sessionEmail: string): Promise<void>;
+    updateUser(email: string, updatedUser: User, sessionEmail: string): Promise<void>;
 }

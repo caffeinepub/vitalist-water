@@ -1,58 +1,46 @@
 {
   "kind": "coverage_report",
   "version": "1.0",
-  "generatedAt": "2026-02-25T06:42:02.375Z",
+  "generatedAt": "2026-02-25T09:38:16.827Z",
   "sources": {
     "buildRequest": true,
     "implementationPlan": true
   },
   "requirements": {
     "total": 3,
-    "implemented": 3,
+    "implemented": 2,
     "items": [
       {
-        "id": "REQ-16",
-        "summary": "Add a 'Distributor Delivery Data' management section in the Admin panel. Admin can create, edit, and delete distributor delivery records. Each record stores: Order ID (linked to an existing order), Truck Number, Driver Name, Driver Contact Number, Distributor (linked user with 'distributor' role), Estimated Delivery Date/Time, and any additional Notes. The backend must persist these records and expose query functions to list all records (admin) and filter by distributor user (distributor role).",
+        "id": "REQ-35",
+        "summary": "Fix the backend addUser function in main.mo so that when a new user is successfully created, a valid and unique user ID is generated and stored with the user record. The returned user object must include the assigned user ID. Ensure the ID is not empty, null, or undefined after creation.",
+        "status": "unknown",
+        "plannedFiles": [],
+        "matchedFiles": []
+      },
+      {
+        "id": "REQ-36",
+        "summary": "Fix the UserManagementPage.tsx user table so that after a new user is created, the user's ID is correctly displayed in the user list/table panel. The table must render the user ID column value for every user row, including newly created users.",
         "status": "implemented",
         "plannedFiles": [
-          "frontend/src/hooks/useQueries.ts",
-          "frontend/src/pages/admin/DistributorDeliveryManagementPage.tsx",
-          "frontend/src/components/layout/AppSidebar.tsx",
-          "frontend/src/App.tsx"
+          "frontend/src/pages/admin/UserManagementPage.tsx",
+          "frontend/src/hooks/useQueries.ts"
         ],
         "matchedFiles": [
-          "frontend/src/hooks/useQueries.ts",
-          "frontend/src/pages/admin/DistributorDeliveryManagementPage.tsx",
-          "frontend/src/components/layout/AppSidebar.tsx",
-          "frontend/src/App.tsx"
+          "frontend/src/pages/admin/UserManagementPage.tsx",
+          "frontend/src/hooks/useQueries.ts"
         ]
       },
       {
-        "id": "REQ-17",
-        "summary": "Create a Distributor portal/panel (accessible only to users with the 'distributor' role) that displays all distributor delivery records assigned to the logged-in distributor. Each card/row shows: Order ID, linked Store Name, Truck Number, Driver Name, Driver Contact Number, Estimated Delivery Date/Time, and current Order Status. The distributor can mark an order as 'Truck Arrived' once they have received the delivery at their location. The panel must be mobile-responsive.",
+        "id": "REQ-37",
+        "summary": "Fix the login flow so that newly created users (added via the Admin's Add User form) can successfully log in with their assigned email and password. Audit the backend login function in main.mo to ensure it looks up users by email against the full users map (including dynamically added users, not just pre-seeded accounts), verifies the hashed password correctly, and returns a valid session token and role on success. Ensure AuthContext.tsx correctly processes the login response and stores the token and role in sessionStorage.",
         "status": "implemented",
         "plannedFiles": [
-          "frontend/src/pages/distributor/DistributorDashboard.tsx",
-          "frontend/src/components/layout/AppSidebar.tsx",
-          "frontend/src/App.tsx",
-          "frontend/src/contexts/AuthContext.tsx"
+          "frontend/src/contexts/AuthContext.tsx",
+          "frontend/src/pages/LoginPage.tsx",
+          "frontend/src/App.tsx"
         ],
         "matchedFiles": [
-          "frontend/src/pages/distributor/DistributorDashboard.tsx",
-          "frontend/src/components/layout/AppSidebar.tsx",
-          "frontend/src/App.tsx",
           "frontend/src/contexts/AuthContext.tsx"
-        ]
-      },
-      {
-        "id": "REQ-18",
-        "summary": "Fix the 'Add Store' and 'Edit Store' map functionality in StoreManagementPage.tsx. The map preview and coordinate display must correctly render using the browser Geolocation API for 'Use Current Location', and the manual coordinate input fields (Latitude, Longitude) must be editable and kept in sync with the map display. Remove any dependency on external map tile providers that may be blocked or broken; use an OpenStreetMap iframe embed or a plain coordinate display with a Leaflet/static map fallback so the map always renders without errors.",
-        "status": "implemented",
-        "plannedFiles": [
-          "frontend/src/pages/admin/StoreManagementPage.tsx"
-        ],
-        "matchedFiles": [
-          "frontend/src/pages/admin/StoreManagementPage.tsx"
         ]
       }
     ]
@@ -64,17 +52,13 @@
     "feature_evidence.json",
     "frontend-file-summaries.txt",
     "frontend-implementation-plan.json",
-    "frontend/src/App.tsx",
     "frontend/src/backend.d.ts",
     "frontend/src/backend.ts",
-    "frontend/src/components/layout/AppSidebar.tsx",
     "frontend/src/contexts/AuthContext.tsx",
     "frontend/src/declarations/backend.did.d.ts",
     "frontend/src/declarations/backend.did.js",
     "frontend/src/hooks/useQueries.ts",
-    "frontend/src/pages/admin/DistributorDeliveryManagementPage.tsx",
-    "frontend/src/pages/admin/StoreManagementPage.tsx",
-    "frontend/src/pages/distributor/DistributorDashboard.tsx",
+    "frontend/src/pages/admin/UserManagementPage.tsx",
     "project_state.json",
     "scratch/component-selection.json",
     "spec.md",

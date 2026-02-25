@@ -1,115 +1,122 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { useInternetIdentity } from '../hooks/useInternetIdentity';
-import { useQueryClient } from '@tanstack/react-query';
+import React, { createContext, useContext, useState, useCallback } from 'react';
+import { useActor } from '../hooks/useActor';
 
-export type AppRole = 'admin' | 'staff' | 'delivery' | 'distributor';
+export type UserRole = 'admin' | 'staff' | 'delivery' | 'distributor';
+export type AppRole = UserRole;
 
 export interface AuthUser {
   email: string;
-  role: AppRole;
+  role: UserRole;
   name: string;
 }
 
 interface AuthContextType {
   user: AuthUser | null;
-  /** Alias for user — kept for backward compatibility */
-  currentUser: AuthUser | null;
+  token: string | null;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   isLoading: boolean;
-  isAuthenticated: boolean;
+  isSessionRestored: boolean;
+  // Backward-compat aliases
+  currentUser: AuthUser | null;
   isAdmin: boolean;
-  isStaff: boolean;
-  isDelivery: boolean;
-  isDistributor: boolean;
+  isAuthenticated: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const DEMO_USERS: Record<string, { password: string; role: AppRole; name: string }> = {
-  'shajan@vitalist.com': { password: 'India@123', role: 'admin', name: 'Shajan' },
-  'admin@vitalist.com': { password: 'admin123', role: 'admin', name: 'Admin User' },
-  'staff@vitalist.com': { password: 'staff123', role: 'staff', name: 'Staff User' },
-  'delivery@vitalist.com': { password: 'delivery123', role: 'delivery', name: 'Delivery User' },
-};
-
-const SESSION_KEY = 'vitalist_auth_user';
+const SESSION_KEY = 'vitalist_session';
+const TOKEN_KEY = 'caffeineAdminToken';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const { login: iiLogin, clear: iiClear, identity } = useInternetIdentity();
-  const queryClient = useQueryClient();
-
-  // Restore session on mount
-  useEffect(() => {
+  // Synchronously restore session from sessionStorage before first render
+  const [user, setUser] = useState<AuthUser | null>(() => {
     try {
       const stored = sessionStorage.getItem(SESSION_KEY);
       if (stored) {
-        const parsed = JSON.parse(stored) as AuthUser;
-        setUser(parsed);
+        const parsed = JSON.parse(stored);
+        if (parsed?.email && parsed?.role) return parsed as AuthUser;
       }
-    } catch {
-      sessionStorage.removeItem(SESSION_KEY);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const login = useCallback(
-    async (email: string, password: string): Promise<boolean> => {
-      const normalizedEmail = email.toLowerCase().trim();
-      const demo = DEMO_USERS[normalizedEmail];
-      if (!demo || demo.password !== password) {
-        return false;
-      }
-
-      const authUser: AuthUser = {
-        email: normalizedEmail,
-        role: demo.role,
-        name: demo.name,
-      };
-
-      // Trigger Internet Identity login to get a real principal for backend calls
-      if (!identity) {
-        try {
-          await iiLogin();
-        } catch (err) {
-          // II login failed or was cancelled — continue anyway
-          console.warn('Internet Identity login issue:', err);
-        }
-      }
-
-      setUser(authUser);
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
-      return true;
-    },
-    [identity, iiLogin]
-  );
-
-  const logout = useCallback(() => {
-    setUser(null);
-    sessionStorage.removeItem(SESSION_KEY);
-    queryClient.clear();
-    // iiClear returns void, not a Promise — call it directly
-    try {
-      iiClear();
     } catch {
       // ignore
     }
-  }, [iiClear, queryClient]);
+    return null;
+  });
+
+  const [token, setToken] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem(TOKEN_KEY) || null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [isLoading, setIsLoading] = useState(false);
+  // Session is immediately restored synchronously via useState initializers
+  const [isSessionRestored] = useState(true);
+
+  // Get the actor for backend login calls
+  const { actor } = useActor();
+
+  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
+    setIsLoading(true);
+    try {
+      if (!actor) {
+        throw new Error('System not ready. Please try again.');
+      }
+
+      // Call the backend login function with email and password directly
+      const result = await actor.login(email.trim().toLowerCase(), password);
+
+      if (!result) {
+        return false;
+      }
+
+      const role = result.role as UserRole;
+      const backendToken = result.token;
+
+      // Derive a display name from the email (part before @)
+      const name = email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+      const authUser: AuthUser = { email: email.trim().toLowerCase(), role, name };
+
+      // Atomically update state and sessionStorage
+      setUser(authUser);
+      setToken(backendToken);
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(authUser));
+      sessionStorage.setItem(TOKEN_KEY, backendToken);
+      sessionStorage.setItem('userRole', role);
+      sessionStorage.setItem('userEmail', email.trim().toLowerCase());
+
+      return true;
+    } catch (err: any) {
+      console.error('[AuthContext] login error:', err);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [actor]);
+
+  const logout = useCallback(() => {
+    setUser(null);
+    setToken(null);
+    sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem('userRole');
+    sessionStorage.removeItem('userEmail');
+  }, []);
 
   const value: AuthContextType = {
     user,
-    currentUser: user, // backward-compat alias
+    token,
     login,
     logout,
     isLoading,
-    isAuthenticated: !!user,
+    isSessionRestored,
+    // Backward-compat aliases
+    currentUser: user,
     isAdmin: user?.role === 'admin',
-    isStaff: user?.role === 'staff',
-    isDelivery: user?.role === 'delivery',
-    isDistributor: user?.role === 'distributor',
+    isAuthenticated: user !== null,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

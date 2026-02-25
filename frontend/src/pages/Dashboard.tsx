@@ -1,15 +1,15 @@
 import React, { useMemo } from 'react';
-import { useGetAllOrders } from '../hooks/useQueries';
+import { useAllOrders } from '../hooks/useQueries';
 import { useAuth } from '../contexts/AuthContext';
 import StatCard from '../components/dashboard/StatCard';
 import StatusBadge from '../components/orders/StatusBadge';
-import { ShoppingCart, Clock, Package, Truck, CheckCircle, XCircle, TrendingUp, Calendar } from 'lucide-react';
+import { ShoppingCart, Clock, Package, Truck, CheckCircle, TrendingUp, Calendar } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { parseOrderMeta } from '../utils/orderUtils';
 
 export default function Dashboard() {
   const { currentUser } = useAuth();
-  const { data: orders = [], isLoading } = useGetAllOrders();
+  const { data: orders = [], isLoading } = useAllOrders();
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);

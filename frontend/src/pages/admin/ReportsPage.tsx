@@ -1,11 +1,11 @@
 import React, { useMemo } from 'react';
-import { useGetAllOrders, useGetAllStores } from '../../hooks/useQueries';
+import { useAllOrders, useAllStores } from '../../hooks/useQueries';
 import { BarChart3, TrendingUp, Package, CheckCircle, Clock, Truck } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function ReportsPage() {
-  const { data: orders = [], isLoading } = useGetAllOrders();
-  const { data: stores = [] } = useGetAllStores();
+  const { data: orders = [], isLoading } = useAllOrders();
+  const { data: stores = [] } = useAllStores();
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -20,9 +20,7 @@ export default function ReportsPage() {
     const monthOrders = orders.filter((o) => new Date(getTs(o)) >= monthAgo);
 
     const deliveredOrders = orders.filter((o) => o.status === 'Delivered');
-    const totalRevenue = deliveredOrders.reduce((sum, o) => sum + Number(o.quantity) * o.rate, 0);
 
-    // Orders per store
     const storeOrderCounts: Record<string, number> = {};
     for (const o of orders) {
       const idx = Number(o.storeId) - 1;
@@ -34,7 +32,6 @@ export default function ReportsPage() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5);
 
-    // Status breakdown
     const statusCounts: Record<string, number> = {};
     for (const o of orders) {
       statusCounts[o.status] = (statusCounts[o.status] ?? 0) + 1;

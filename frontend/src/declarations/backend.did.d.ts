@@ -10,6 +10,10 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export type AppUserRole = { 'admin' : null } |
+  { 'distributor' : null } |
+  { 'staff' : null } |
+  { 'delivery' : null };
 export interface DistributorDelivery {
   'distributor' : Principal,
   'deliveryId' : string,
@@ -41,7 +45,8 @@ export interface Store {
 }
 export type Time = bigint;
 export interface User {
-  'role' : UserRole,
+  'id' : string,
+  'role' : AppUserRole,
   'email' : string,
   'hashedPassword' : string,
 }
@@ -55,37 +60,56 @@ export type UserRole = { 'admin' : null } |
   { 'guest' : null };
 export interface _SERVICE {
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
-  'addStore' : ActorMethod<[Store], undefined>,
-  'addUser' : ActorMethod<[User], undefined>,
+  'addStore' : ActorMethod<[Store, string], undefined>,
+  'addUser' : ActorMethod<
+    [
+      { 'role' : AppUserRole, 'email' : string, 'hashedPassword' : string },
+      string,
+    ],
+    User
+  >,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
-  'createDistributorDelivery' : ActorMethod<[DistributorDelivery], undefined>,
-  'createOrder' : ActorMethod<[OrderRecord], undefined>,
-  'deleteDistributorDelivery' : ActorMethod<[string], undefined>,
-  'deleteStore' : ActorMethod<[bigint], undefined>,
-  'deleteUser' : ActorMethod<[string], undefined>,
-  'getAllDistributorDeliveries' : ActorMethod<[], Array<DistributorDelivery>>,
-  'getAllOrders' : ActorMethod<[], Array<OrderRecord>>,
-  'getAllStores' : ActorMethod<[], Array<Store>>,
-  'getAllUsers' : ActorMethod<[], Array<User>>,
+  'createDistributorDelivery' : ActorMethod<
+    [DistributorDelivery, string],
+    undefined
+  >,
+  'createOrder' : ActorMethod<[OrderRecord, string], undefined>,
+  'deleteDistributorDelivery' : ActorMethod<[string, string], undefined>,
+  'deleteStore' : ActorMethod<[bigint, string], undefined>,
+  'deleteUser' : ActorMethod<[string, string], undefined>,
+  'getAllDistributorDeliveries' : ActorMethod<
+    [string],
+    Array<DistributorDelivery>
+  >,
+  'getAllOrders' : ActorMethod<[string], Array<OrderRecord>>,
+  'getAllStores' : ActorMethod<[string], Array<Store>>,
+  'getAllUsers' : ActorMethod<[string], Array<User>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getDistributorDeliveriesByUser' : ActorMethod<
-    [Principal],
+    [Principal, string],
     Array<DistributorDelivery>
   >,
-  'getDistributorDelivery' : ActorMethod<[string], [] | [DistributorDelivery]>,
-  'getOrder' : ActorMethod<[string], [] | [OrderRecord]>,
+  'getDistributorDelivery' : ActorMethod<
+    [string, string],
+    [] | [DistributorDelivery]
+  >,
+  'getOrder' : ActorMethod<[string, string], [] | [OrderRecord]>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'initializeSystem' : ActorMethod<[], undefined>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
+  'login' : ActorMethod<
+    [string, string],
+    [] | [{ 'token' : string, 'role' : string }]
+  >,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'updateDistributorDelivery' : ActorMethod<
-    [string, DistributorDelivery],
+    [string, DistributorDelivery, string],
     undefined
   >,
-  'updateOrder' : ActorMethod<[string, OrderRecord], undefined>,
-  'updateStore' : ActorMethod<[bigint, Store], undefined>,
-  'updateUser' : ActorMethod<[string, User], undefined>,
+  'updateOrder' : ActorMethod<[string, OrderRecord, string], undefined>,
+  'updateStore' : ActorMethod<[bigint, Store, string], undefined>,
+  'updateUser' : ActorMethod<[string, User, string], undefined>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

@@ -1,90 +1,53 @@
 {
   "kind": "implementation_plan",
   "version": "1.0",
-  "title": "Add Distributor Delivery Data (Admin → Distributor Panel) and Fix Add Store Map",
+  "title": "Fix newly added users: missing user ID display in panel and login failure",
   "requirements": [
     {
-      "id": "REQ-16",
-      "summary": "Add 'Distributor Delivery Data' management section in Admin panel with CRUD capabilities for distributor delivery records",
+      "id": "REQ-36",
+      "summary": "Fix the UserManagementPage.tsx user table to correctly display user IDs for newly created users after successful creation",
       "acceptanceCriteria": [
-        "Admin panel has an 'Add Distributor Delivery Data' form with fields: Order ID (dropdown or searchable from existing orders), Truck Number, Driver Name, Driver Contact Number, Distributor (dropdown of users with distributor role), Estimated Delivery Date/Time, and Notes.",
-        "Admin can add, edit, and delete distributor delivery records from a dedicated table/list.",
-        "Backend stores distributor delivery records in a stable map and enforces that only admins can create/update/delete them.",
-        "A query function returns distributor delivery records filtered by the logged-in distributor's user ID so each distributor only sees their own assignments.",
-        "The distributor delivery record is linked to an order and displays: Order ID, Truck Number, Driver Name, Driver Contact, Estimated Delivery Date/Time, and current order status."
+        "After successfully adding a user, the user table refreshes and shows the new user's ID in the ID column.",
+        "No user row in the table displays a blank, undefined, or missing ID value.",
+        "The user list re-fetches (React Query invalidation) immediately after a successful addUser mutation so the new record appears without a manual page reload."
       ],
       "file_operations": [
+        {
+          "path": "frontend/src/pages/admin/UserManagementPage.tsx",
+          "operation": "modify",
+          "description": "Ensure the user table correctly renders the 'id' field from the User type returned by the backend. Verify that after the addUser mutation succeeds, React Query invalidates the 'users' query key so the table re-fetches and displays the newly created user with the generated ID. Check that the table column mapping for user ID is not accessing undefined or empty values."
+        },
         {
           "path": "frontend/src/hooks/useQueries.ts",
           "operation": "modify",
-          "description": "Add React Query hooks for distributor delivery CRUD operations: useGetAllDistributorDeliveries (admin query), useGetDistributorDeliveriesByUser (distributor query), useCreateDistributorDelivery (mutation), useUpdateDistributorDelivery (mutation), useDeleteDistributorDelivery (mutation). Each hook must call the corresponding backend actor method from backend.d.ts (getAllDistributorDeliveries, getDistributorDeliveriesByUser, createDistributorDelivery, updateDistributorDelivery, deleteDistributorDelivery). Use the authorization component's role-based access pattern to ensure admin-only mutations. Include proper error handling and cache invalidation on mutations."
-        },
-        {
-          "path": "frontend/src/pages/admin/DistributorDeliveryManagementPage.tsx",
-          "operation": "create",
-          "description": "Create the admin management page for distributor delivery records. Display a table/list of all distributor delivery records fetched via useGetAllDistributorDeliveries. Include columns: Delivery ID, Order ID, Distributor (display name from Principal), Truck Number, Driver Name, Driver Contact, Estimated Delivery Date/Time, Notes. Add an 'Add Distributor Delivery' button that opens a dialog with a form including: Order ID (dropdown populated from useGetAllOrders showing only approved orders), Truck Number (text input), Driver Name (text input), Driver Contact Number (tel input), Distributor (dropdown populated from useGetAllUsers filtered to distributor role users, displaying name), Estimated Delivery Date/Time (datetime-local input), and Notes (textarea). Include edit and delete actions for each row with confirmation dialogs. Use the authorization component to restrict access to admin role only. Ensure mobile-responsive layout. On successful create/edit/delete, show toast notifications."
-        },
-        {
-          "path": "frontend/src/components/layout/AppSidebar.tsx",
-          "operation": "modify",
-          "description": "Add 'Distributor Deliveries' navigation item to the sidebar nav items array, restricted to admin role, linking to '/admin/distributor-deliveries' route. Ensure the nav item appears in the Admin section alongside existing admin pages (Users, Stores, Orders, QR Codes, Reports)."
-        },
-        {
-          "path": "frontend/src/App.tsx",
-          "operation": "modify",
-          "description": "Add a route for '/admin/distributor-deliveries' that renders the DistributorDeliveryManagementPage component. Place this route in the admin-protected routes section. Ensure the route is only accessible when the user has the admin role."
+          "description": "Review the useAddUser mutation to ensure it properly invalidates the 'users' query key on success. Confirm the mutation returns the complete User object including the assigned ID from the backend addUser response. Verify that the mutation's onSuccess callback triggers query invalidation immediately."
         }
       ]
     },
     {
-      "id": "REQ-17",
-      "summary": "Create Distributor portal/panel displaying assigned delivery records with 'Mark Truck Arrived' capability",
+      "id": "REQ-37",
+      "summary": "Fix the frontend login flow so newly created users can successfully log in and are routed to the appropriate role-based page",
       "acceptanceCriteria": [
-        "A dedicated Distributor Dashboard page is accessible only when the logged-in user has the 'distributor' role; other roles are redirected.",
-        "The page fetches distributor delivery records assigned to the current distributor and renders them as cards or table rows.",
-        "Each entry displays: Order ID, Store Name, Truck Number, Driver Name, Driver Contact, Estimated Delivery Date/Time, and Order Status badge.",
-        "Each entry has a 'Mark Truck Arrived' button that, when clicked, updates the distributor delivery record status to 'Truck Arrived' in the backend; the button is disabled/hidden after already marked.",
-        "The layout is fully responsive and optimized for mobile screens.",
-        "The Distributor role is added to sidebar navigation so that Distributor users only see the Distributor Dashboard nav item."
+        "A user created via the Add User form can log in immediately after creation using the email and password provided during creation.",
+        "On successful login, a session token and the user's role are returned and stored in sessionStorage by AuthContext.tsx.",
+        "After login, the newly created user is routed to the page appropriate for their role (Staff → Order Creation, Delivery → Delivery Dashboard, Distributor → Distributor Dashboard, Admin → Dashboard).",
+        "No 'invalid credentials' or 'user not found' error is shown for a valid newly created account."
       ],
       "file_operations": [
-        {
-          "path": "frontend/src/pages/distributor/DistributorDashboard.tsx",
-          "operation": "create",
-          "description": "Create the distributor dashboard page that fetches distributor delivery records assigned to the logged-in distributor via useGetDistributorDeliveriesByUser (passing the caller's Principal from useInternetIdentity). Display records as responsive cards (mobile-first) or table rows (desktop). Each card/row shows: Order ID (link or badge), Store Name (fetched by looking up the order's storeId in useGetAllStores, then displaying storeName), Truck Number, Driver Name, Driver Contact Number, Estimated Delivery Date/Time (formatted as locale datetime string), and Order Status badge (using StatusBadge component with the status from the linked order via useGetOrder). Include a 'Mark Truck Arrived' button on each card that calls a mutation to update the distributor delivery record or order status (implementation depends on backend schema; if backend stores 'Truck Arrived' status in DistributorDelivery, update that record; if it updates the order status, call updateOrder). The button should be disabled or hidden if the status is already 'Truck Arrived'. Use the authorization component to restrict access to distributor role only; redirect non-distributors to the dashboard or login. Show loading skeletons while fetching data. Display an empty state message if no deliveries are assigned. On successful status update, show a success toast notification and refetch the deliveries list."
-        },
-        {
-          "path": "frontend/src/components/layout/AppSidebar.tsx",
-          "operation": "modify",
-          "description": "Add 'Distributor Dashboard' navigation item to the sidebar nav items array, restricted to distributor role, linking to '/distributor/dashboard' route. Ensure the distributor role is recognized in the role-based filtering logic (add 'distributor' to the role type if not already present). The nav item should only appear for users with the distributor role, and no admin/staff/delivery nav items should appear for distributors."
-        },
-        {
-          "path": "frontend/src/App.tsx",
-          "operation": "modify",
-          "description": "Add a route for '/distributor/dashboard' that renders the DistributorDashboard component. Place this route in a distributor-protected routes section (create if needed). Ensure the route is only accessible when the user has the distributor role. Update the role-based default page routing logic to redirect distributor users to '/distributor/dashboard' on login."
-        },
         {
           "path": "frontend/src/contexts/AuthContext.tsx",
           "operation": "modify",
-          "description": "Add 'isDistributor' boolean flag to the AuthContext value, derived from the user's role. Update the role-based flag logic to check if the current user's role is 'distributor' (this may require extending the UserRole type to include 'distributor' if not already present). Ensure the distributor role is recognized alongside admin, staff, and delivery roles."
-        }
-      ]
-    },
-    {
-      "id": "REQ-18",
-      "summary": "Fix 'Add Store' and 'Edit Store' map functionality in StoreManagementPage.tsx",
-      "acceptanceCriteria": [
-        "Opening the Add Store or Edit Store dialog no longer shows a broken/blank map area or console errors related to the map.",
-        "The 'Use Current Location' button successfully requests the browser geolocation, then populates the Latitude and Longitude fields and updates the map preview accordingly.",
-        "Manual edits to the Latitude and Longitude input fields update the map preview in real time.",
-        "The map embed or coordinate display renders correctly in all modern browsers without relying on any API key or blocked external service.",
-        "Store save/update works correctly after using the location picker."
-      ],
-      "file_operations": [
+          "description": "Update the login function to call the backend login capability (actor.login) instead of using the hardcoded local user list. Ensure the function sends the email and hashed password to the backend, receives the token and role in the response, stores both in sessionStorage, updates the user state with the authenticated user's details, and handles null responses (invalid credentials) with appropriate error messages. Remove or deprecate the hardcoded USERS array dependency for authentication. Preserve the existing session restoration logic in restoreSession."
+        },
         {
-          "path": "frontend/src/pages/admin/StoreManagementPage.tsx",
+          "path": "frontend/src/pages/LoginPage.tsx",
           "operation": "modify",
-          "description": "Fix the map preview in the Add Store and Edit Store dialog. Remove any dependency on external map tile providers (e.g., Leaflet, Google Maps API) that may be blocked or require API keys. Replace the map preview with an OpenStreetMap iframe embed using the format: `https://www.openstreetmap.org/export/embed.html?bbox={lon-delta},{lat-delta},{lon+delta},{lat+delta}&layer=mapnik&marker={lat},{lon}` where delta is ~0.01 for zoom. Bind the iframe src to the current latitude and longitude state so it updates in real time when the user edits the coordinate inputs or clicks 'Use Current Location'. Ensure the 'Use Current Location' button calls the browser Geolocation API (navigator.geolocation.getCurrentPosition) to fetch the user's coordinates, then updates the latitude and longitude form fields and the map preview iframe src. Add error handling for geolocation permission denied or unavailable. Ensure the latitude and longitude input fields are editable number inputs with step='any' and that changes to these fields immediately update the map preview. Add a fallback plain text coordinate display if the iframe fails to load. Ensure the map preview container has explicit dimensions (e.g., min-height: 300px, width: 100%, aspect-ratio: 16/9) so it never collapses. Test that store save/update works correctly with the new location picker implementation."
+          "description": "Ensure the LoginPage hashes the user's entered password before passing it to the AuthContext login function. Verify error handling displays appropriate messages when login fails (e.g., 'Invalid credentials' when the backend returns null). Confirm the loading state correctly reflects the async login operation."
+        },
+        {
+          "path": "frontend/src/App.tsx",
+          "operation": "modify",
+          "description": "Verify that after successful login, the currentPage routing logic correctly maps the user's role to the appropriate initial page: 'staff' → 'order-creation', 'delivery' → 'delivery-dashboard', 'distributor' → 'distributor-dashboard', 'admin' → 'dashboard'. Ensure session restoration in useEffect correctly restores the user's role and navigates to the appropriate page without requiring re-login."
         }
       ]
     }

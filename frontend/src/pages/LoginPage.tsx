@@ -69,7 +69,7 @@ export default function LoginPage() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="admin@vitalist.com"
+                  placeholder="Enter your email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={loading}
@@ -103,14 +103,6 @@ export default function LoginPage() {
                 )}
               </Button>
             </form>
-
-            {/* Demo credentials hint */}
-            <div className="mt-4 p-3 bg-muted rounded-lg text-xs text-muted-foreground space-y-1">
-              <p className="font-medium text-foreground">Demo Credentials:</p>
-              <p>Admin: admin@vitalist.com / admin123</p>
-              <p>Staff: staff@vitalist.com / staff123</p>
-              <p>Delivery: delivery@vitalist.com / delivery123</p>
-            </div>
           </CardContent>
         </Card>
 

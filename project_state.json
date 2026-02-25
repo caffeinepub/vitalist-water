@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0.0",
-  "projectStateVersion": 9,
+  "projectStateVersion": 27,
   "summary": "Vitalist Water — Order & Delivery Management System. Enterprise-grade web app managing the full order-to-delivery lifecycle for a water distribution business. Features role-based access control (Admin, Staff, Delivery, Distributor), GPS store mapping, automated invoice generation, encrypted QR code workflow, camera-based QR scanning, 4-stage controlled delivery workflow, date-based reporting, and a Distributor portal for tracking deliveries with truck/driver info, barcode scanning, and image uploads. No financial/profit module included.",
   "architectural_notes": [
     "No financial/profit module — intentionally excluded from scope",
@@ -11,12 +11,20 @@
     "Orders are permanently locked after Stage 4 completion — no re-scan or modification allowed",
     "All workflow stages log timestamps; duplicate scans are blocked at every stage",
     "Distributor is a 4th role — Admin generates distributor credentials; distributors track their own deliveries via a dedicated portal",
-    "Admin can input distributor delivery data (truck no, driver contact) which surfaces in the Distributor panel"
+    "Admin can input distributor delivery data (truck no, driver contact) which surfaces in the Distributor panel",
+    "Primary admin credentials: shajan@vitalist.com / India@123 — demo credentials removed from login page"
   ],
   "known_issues": [
     "Sidebar navigation options are not visible by default — they only appear on hover/focus; sidebar should show all options visibly at all times",
     "Admin panel shows 'only admin can add/edit' error when attempting to add/edit stores or other records — role detection or permission check is incorrectly blocking admin actions",
-    "Add Store map is broken or non-functional — needs investigation and fix"
+    "Add Store map is broken or non-functional — needs investigation and fix",
+    "Admin panel 'Add User' button fails when clicked — admin cannot add staff/delivery/distributor users despite being in admin panel; role check incorrectly blocking user creation",
+    "Order creation permission error: system incorrectly shows 'only admin can create order' — orders should be creatable by both Admin and Staff roles",
+    "Admin 'Add User' permission denied error persists in Version 5 — 'Permission denied: Only admins can add users' still shown even when logged in as admin; role resolution still broken for user creation",
+    "Admin user shajan@vitalist.com is being denied access to admin operations (add user, add store, etc.) in the admin panel — admin role check still incorrectly blocking all admin actions in Version 8",
+    "Admin token is reported missing on page load — 'Admin token is missing. Backend operations may fail.' error persists in Version 9 even when logged in as shajan@vitalist.com; token/session initialization is still broken",
+    "'Use Current Location' geolocation button in Add Store form is broken or non-functional in Version 10",
+    "Add User form is missing 'Distributor' as a role option — admin cannot create distributor accounts from the user creation dialog"
   ],
   "isFixRequest": true,
   "existing_features": [
@@ -129,6 +137,110 @@
       "title": "Fix the 'Add Store' and 'Edit Store' map functionality in StoreManagementPage.tsx. The map preview and coordinate display must correctly render using the browser Geolocation API for 'Use Current Location', and the manual coordinate input fields (Latitude, Longitude) must be editable and kept in sync with the map display. Remove any dependency on external map tile providers that may be blocked or broken; use an OpenStreetMap iframe embed or a plain coordinate display with a Leaflet/static map fallback so the map always renders without errors.",
       "reqIds": [
         "REQ-18"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-fix-the-add-user-button-in-usermanagementpage-tsx-so-that-when-an-admin-clicks-it-the-user-creation-dialog-opens-and-the-form-submission-succeeds-without-any-role-check-error-the-admin-role-must-be-correctly-recognized-when-calling-adduser-on-the-backend-ensure-the-session-token-and-role-stored-in-sessionstorage-are-read-correctly-that-the-caller-principal-is-matched-to-the-stored-admin-user-record-and-that-the-backend-adduser-function-permits-the-operation-for-the-admin-role",
+      "title": "Fix the 'Add User' button in UserManagementPage.tsx so that when an admin clicks it, the user creation dialog opens and the form submission succeeds without any role-check error. The admin role must be correctly recognized when calling addUser on the backend. Ensure the session token and role stored in sessionStorage are read correctly, that the caller principal is matched to the stored admin user record, and that the backend addUser function permits the operation for the admin role.",
+      "reqIds": [
+        "REQ-19"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-fix-the-order-creation-permission-check-in-the-backend-main-mo-and-in-ordercreationpage-tsx-ordermanagementpage-tsx-so-that-both-admin-and-staff-roles-are-permitted-to-create-orders-the-backend-createorder-function-must-accept-calls-from-users-with-either-admin-or-staff-roles-and-must-not-return-an-only-admin-can-create-order-or-only-staff-can-create-order-error-for-either-role",
+      "title": "Fix the order creation permission check in the backend (main.mo) and in OrderCreationPage.tsx / OrderManagementPage.tsx so that both Admin and Staff roles are permitted to create orders. The backend createOrder function must accept calls from users with either 'admin' or 'staff' roles and must not return an 'only admin can create order' or 'only staff can create order' error for either role.",
+      "reqIds": [
+        "REQ-20"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-fix-the-frontend-usermanagementpage-tsx-and-authcontext-tsx-so-that-the-admin-session-token-and-role-are-correctly-read-from-sessionstorage-and-passed-to-the-backend-adduser-call-audit-the-full-call-chain-from-the-create-user-button-click-through-the-mutation-to-the-actor-call-ensure-the-actor-is-initialized-with-the-correct-authenticated-identity-the-role-extracted-from-sessionstorage-matches-admin-and-the-backend-receives-the-request-under-the-same-principal-that-was-registered-as-admin-during-login-add-defensive-logging-or-error-boundary-to-surface-the-actual-mismatch-if-it-recurs",
+      "title": "Fix the frontend UserManagementPage.tsx and AuthContext.tsx so that the admin session token and role are correctly read from sessionStorage and passed to the backend addUser call. Audit the full call chain from the 'Create User' button click through the mutation to the actor call: ensure the actor is initialized with the correct authenticated identity, the role extracted from sessionStorage matches 'admin', and the backend receives the request under the same principal that was registered as admin during login. Add defensive logging or error boundary to surface the actual mismatch if it recurs.",
+      "reqIds": [
+        "REQ-22"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-remove-all-demo-credentials-display-from-loginpage-tsx-the-login-page-must-not-show-any-hardcoded-email-password-hints-demo-account-sections-or-credential-helper-text-to-the-user-the-page-should-only-show-the-email-and-password-input-fields-and-the-login-button",
+      "title": "Remove all demo credentials display from LoginPage.tsx. The login page must not show any hardcoded email/password hints, demo account sections, or credential helper text to the user. The page should only show the email and password input fields and the login button.",
+      "reqIds": [
+        "REQ-24"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-fix-the-frontend-authcontext-tsx-usermanagementpage-tsx-and-all-admin-pages-storemanagementpage-tsx-ordermanagementpage-tsx-distributordeliverymanagementpage-tsx-so-that-the-session-token-and-role-stored-in-sessionstorage-are-correctly-read-on-every-page-load-refresh-and-after-login-and-the-correct-authenticated-identity-is-passed-to-every-backend-actor-call-ensure-the-actor-used-for-admin-operations-is-initialized-with-the-same-principal-that-was-registered-as-admin-during-login-add-visible-console-error-logging-not-ui-breaking-if-the-role-or-token-is-missing-or-mismatched-so-future-regressions-surface-immediately",
+      "title": "Fix the frontend AuthContext.tsx, UserManagementPage.tsx, and all admin pages (StoreManagementPage.tsx, OrderManagementPage.tsx, DistributorDeliveryManagementPage.tsx) so that the session token and role stored in sessionStorage are correctly read on every page load, refresh, and after login, and the correct authenticated identity is passed to every backend actor call. Ensure the actor used for admin operations is initialized with the same principal that was registered as admin during login. Add visible console error logging (not UI-breaking) if the role or token is missing or mismatched, so future regressions surface immediately.",
+      "reqIds": [
+        "REQ-26"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-fix-the-frontend-authcontext-tsx-useactor-ts-hook-and-all-admin-pages-usermanagementpage-tsx-storemanagementpage-tsx-ordermanagementpage-tsx-distributordeliverymanagementpage-tsx-to-correctly-read-the-session-token-and-role-from-sessionstorage-for-the-account-shajan-vitalist-com-initialize-the-backend-actor-with-the-matching-authenticated-identity-and-pass-the-correct-credentials-to-every-backend-call-so-no-admin-action-button-add-edit-delete-approve-cancel-is-blocked-by-a-frontend-role-guard-or-actor-initialization-mismatch",
+      "title": "Fix the frontend AuthContext.tsx, useActor.ts hook, and all admin pages (UserManagementPage.tsx, StoreManagementPage.tsx, OrderManagementPage.tsx, DistributorDeliveryManagementPage.tsx) to correctly read the session token and role from sessionStorage for the account shajan@vitalist.com, initialize the backend actor with the matching authenticated identity, and pass the correct credentials to every backend call so no admin action button (Add, Edit, Delete, Approve, Cancel) is blocked by a frontend role guard or actor initialization mismatch.",
+      "reqIds": [
+        "REQ-29"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-fix-the-admin-token-is-missing-backend-operations-may-fail-please-reload-the-application-with-the-correct-url-error-that-appears-for-the-admin-user-shajan-vitalist-com-after-login-the-root-cause-is-that-the-session-token-and-or-role-stored-in-sessionstorage-are-not-being-read-and-applied-before-the-first-backend-actor-call-is-made-ensure-that-on-every-page-load-and-after-login-the-session-token-is-reliably-read-from-sessionstorage-the-actor-is-initialized-with-the-correct-authenticated-identity-and-no-token-missing-warning-is-shown-for-a-logged-in-admin-user-the-fix-must-apply-to-authcontext-tsx-and-any-initialization-logic-in-useactor-ts-or-app-tsx-that-gates-backend-calls-behind-token-availability",
+      "title": "Fix the 'Admin token is missing. Backend operations may fail. Please reload the application with the correct URL.' error that appears for the admin user (shajan@vitalist.com) after login. The root cause is that the session token and/or role stored in sessionStorage are not being read and applied before the first backend actor call is made. Ensure that on every page load and after login, the session token is reliably read from sessionStorage, the actor is initialized with the correct authenticated identity, and no 'token missing' warning is shown for a logged-in admin user. The fix must apply to AuthContext.tsx and any initialization logic in useActor.ts or App.tsx that gates backend calls behind token availability.",
+      "reqIds": [
+        "REQ-30"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-audit-and-fix-the-backend-actor-initialization-in-useactor-ts-and-authcontext-tsx-so-that-the-actor-is-not-created-or-used-in-an-unauthenticated-anonymous-state-when-a-valid-session-exists-in-sessionstorage-the-actor-must-be-re-initialized-immediately-once-the-session-token-and-role-are-confirmed-present-and-all-react-query-hooks-in-usequeries-ts-must-wait-for-a-valid-actor-before-issuing-backend-calls-rather-than-firing-with-an-anonymous-or-null-actor",
+      "title": "Audit and fix the backend actor initialization in useActor.ts and AuthContext.tsx so that the actor is not created or used in an unauthenticated/anonymous state when a valid session exists in sessionStorage. The actor must be (re-)initialized immediately once the session token and role are confirmed present, and all React Query hooks in useQueries.ts must wait for a valid actor before issuing backend calls rather than firing with an anonymous or null actor.",
+      "reqIds": [
+        "REQ-31"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-fix-the-use-current-location-geolocation-button-in-the-add-store-and-edit-store-forms-in-storemanagementpage-tsx-when-the-button-is-clicked-the-browser-geolocation-api-must-be-invoked-correctly-and-the-returned-latitude-and-longitude-values-must-be-populated-into-the-form-fields-and-reflected-in-the-map-coordinate-display-the-button-must-not-silently-fail-or-error-out-handle-permission-denied-and-unavailable-geolocation-errors-with-a-clear-user-facing-message",
+      "title": "Fix the 'Use Current Location' (geolocation) button in the Add Store and Edit Store forms in StoreManagementPage.tsx. When the button is clicked, the browser Geolocation API must be invoked correctly, and the returned latitude and longitude values must be populated into the form fields and reflected in the map/coordinate display. The button must not silently fail or error out. Handle permission-denied and unavailable geolocation errors with a clear user-facing message.",
+      "reqIds": [
+        "REQ-32"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-add-distributor-as-a-selectable-role-option-in-the-add-user-and-edit-user-forms-in-usermanagementpage-tsx-the-role-dropdown-must-include-all-four-roles-admin-staff-delivery-and-distributor-when-a-user-is-created-or-updated-with-the-distributor-role-the-backend-must-correctly-store-and-return-that-role-and-the-user-must-have-access-to-the-distributor-portal-upon-login",
+      "title": "Add 'Distributor' as a selectable role option in the Add User and Edit User forms in UserManagementPage.tsx. The role dropdown must include all four roles: Admin, Staff, Delivery, and Distributor. When a user is created or updated with the 'distributor' role, the backend must correctly store and return that role, and the user must have access to the Distributor portal upon login.",
+      "reqIds": [
+        "REQ-33"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-fix-the-permission-denied-error-returned-by-the-backend-when-an-admin-user-attempts-to-add-a-store-via-the-add-store-form-in-storemanagementpage-tsx-audit-the-backend-addstore-function-in-main-mo-to-ensure-the-caller-s-role-is-resolved-correctly-using-the-session-based-auth-pattern-token-email-lookup-not-internet-identity-principal-alone-and-that-any-user-with-the-admin-role-including-shajan-vitalist-com-and-admin-vitalist-com-is-permitted-to-call-addstore-updatestore-and-deletestore-without-receiving-a-permission-denial-also-audit-the-frontend-call-in-storemanagementpage-tsx-to-confirm-the-session-token-and-role-are-read-from-sessionstorage-and-passed-correctly-to-the-actor-call-before-the-mutation-is-fired",
+      "title": "Fix the 'Permission Denied' error returned by the backend when an admin user attempts to add a store via the Add Store form in StoreManagementPage.tsx. Audit the backend addStore function in main.mo to ensure the caller's role is resolved correctly using the session-based auth pattern (token/email lookup, not Internet Identity principal alone), and that any user with the 'admin' role — including shajan@vitalist.com and admin@vitalist.com — is permitted to call addStore, updateStore, and deleteStore without receiving a permission denial. Also audit the frontend call in StoreManagementPage.tsx to confirm the session token and role are read from sessionStorage and passed correctly to the actor call before the mutation is fired.",
+      "reqIds": [
+        "REQ-34"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-fix-the-usermanagementpage-tsx-user-table-so-that-after-a-new-user-is-created-the-user-s-id-is-correctly-displayed-in-the-user-list-table-panel-the-table-must-render-the-user-id-column-value-for-every-user-row-including-newly-created-users",
+      "title": "Fix the UserManagementPage.tsx user table so that after a new user is created, the user's ID is correctly displayed in the user list/table panel. The table must render the user ID column value for every user row, including newly created users.",
+      "reqIds": [
+        "REQ-36"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-fix-the-login-flow-so-that-newly-created-users-added-via-the-admin-s-add-user-form-can-successfully-log-in-with-their-assigned-email-and-password-audit-the-backend-login-function-in-main-mo-to-ensure-it-looks-up-users-by-email-against-the-full-users-map-including-dynamically-added-users-not-just-pre-seeded-accounts-verifies-the-hashed-password-correctly-and-returns-a-valid-session-token-and-role-on-success-ensure-authcontext-tsx-correctly-processes-the-login-response-and-stores-the-token-and-role-in-sessionstorage",
+      "title": "Fix the login flow so that newly created users (added via the Admin's Add User form) can successfully log in with their assigned email and password. Audit the backend login function in main.mo to ensure it looks up users by email against the full users map (including dynamically added users, not just pre-seeded accounts), verifies the hashed password correctly, and returns a valid session token and role on success. Ensure AuthContext.tsx correctly processes the login response and stores the token and role in sessionStorage.",
+      "reqIds": [
+        "REQ-37"
       ],
       "version": 1
     }
@@ -254,6 +366,66 @@
       "id": "AR-27",
       "summary": "Professional corporate login page redesign: remove demo credentials display, add Distributor login option alongside existing roles. Login credentials: shajan@vitalist.com / India@123. Admin generates IDs for distributor/staff/delivery users.",
       "reqIds": [],
+      "status": "pending"
+    },
+    {
+      "id": "AR-28",
+      "summary": "Fix the backend addUser permission check in backend/main.mo so that when an authenticated admin user (e.g., shajan@vitalist.com or admin@vitalist.com) calls addUser, the backend correctly resolves the caller's identity to their stored user record and confirms their role is 'admin' before permitting the operation. The check must not rely solely on the Internet Identity principal if the session-based auth pattern stores role separately — ensure the role lookup matches the actual auth mechanism used throughout the rest of the codebase. The addUser function must not return 'Permission denied: Only admins can add users' for any user whose stored role is 'admin'.",
+      "reqIds": [
+        "REQ-21"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-29",
+      "summary": "Add a new admin account with email 'shajan@vitalist.com' and password 'India@123' to the backend's pre-seeded user list (alongside the existing admin@vitalist.com account), ensuring it has the 'admin' role and is fully functional for all admin operations.",
+      "reqIds": [
+        "REQ-23"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-30",
+      "summary": "Perform a root-cause audit and fix of the backend addUser (and all other admin-restricted functions: updateUser, deleteUser, addStore, updateStore, deleteStore, approveOrder, cancelOrder) permission check in backend/main.mo. The backend must correctly resolve the caller's identity to their stored user record and confirm their role is 'admin' before permitting these operations. The fix must ensure the role lookup is consistent with the session-based auth pattern used throughout the codebase (i.e., it must not rely solely on the Internet Identity principal if role is stored separately). None of these functions may return 'Permission denied: Only admins can add users' or any equivalent denial message when the authenticated caller has the 'admin' role.",
+      "reqIds": [
+        "REQ-25"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-31",
+      "summary": "Add 'shajan@vitalist.com' with password 'India@123' and role 'admin' to the backend pre-seeded user list in backend/main.mo if not already present. Ensure this account is treated identically to 'admin@vitalist.com' for all role checks and admin-restricted operations.",
+      "reqIds": [
+        "REQ-27"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-32",
+      "summary": "Perform a root-cause fix of the backend permission/role-resolution logic in backend/main.mo. The caller's identity must be matched to their stored user record using the session-based auth pattern (not Internet Identity principal alone). Every admin-restricted function must correctly recognize any user whose stored role is 'admin' — including shajan@vitalist.com — and permit the operation without returning any 'Permission denied' or 'Only admin' error.",
+      "reqIds": [
+        "REQ-28"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-33",
+      "summary": "Fix 'Add Current Location' (Use Current Location / geolocation) functionality in the Add Store form — it is broken or not working correctly.",
+      "reqIds": [],
+      "status": "pending"
+    },
+    {
+      "id": "AR-34",
+      "summary": "Fix Add User form to include 'Distributor' as a selectable role option — currently missing from the role dropdown when admin creates a new user.",
+      "reqIds": [],
+      "status": "pending"
+    },
+    {
+      "id": "AR-35",
+      "summary": "Fix the backend addUser function in main.mo so that when a new user is successfully created, a valid and unique user ID is generated and stored with the user record. The returned user object must include the assigned user ID. Ensure the ID is not empty, null, or undefined after creation.",
+      "reqIds": [
+        "REQ-35"
+      ],
       "status": "pending"
     }
   ],

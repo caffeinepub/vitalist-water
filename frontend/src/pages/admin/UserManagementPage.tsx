@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
-import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Loader2, Users } from 'lucide-react';
+import { useAllUsers, useAddUser, useUpdateUser, useDeleteUser, AddUserInput } from '../../hooks/useQueries';
+import { useActor } from '../../hooks/useActor';
+import { User, AppUserRole } from '../../backend';
+import { mapAppRoleToBackendRole, mapBackendRoleToAppRole } from '../../hooks/useQueries';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogDescription,
 } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -29,213 +31,219 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useGetAllUsers, useAddUser, useUpdateUser, useDeleteUser } from '../../hooks/useQueries';
-import { UserRole } from '../../backend';
-import type { User } from '../../backend';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Plus, Pencil, Trash2, Search, Loader2, Users } from 'lucide-react';
+import { toast } from 'sonner';
+
+type AppRole = 'admin' | 'staff' | 'delivery' | 'distributor';
+
+const ROLE_OPTIONS: { value: AppRole; label: string }[] = [
+  { value: 'admin', label: 'Admin' },
+  { value: 'staff', label: 'Staff' },
+  { value: 'delivery', label: 'Delivery' },
+  { value: 'distributor', label: 'Distributor' },
+];
 
 const ROLE_LABELS: Record<string, string> = {
-  [UserRole.admin]: 'Admin',
-  [UserRole.user]: 'Staff',
-  [UserRole.guest]: 'Delivery',
+  admin: 'Admin',
+  staff: 'Staff',
+  delivery: 'Delivery',
+  distributor: 'Distributor',
 };
 
-const ROLE_VARIANTS: Record<string, 'default' | 'secondary' | 'outline'> = {
-  [UserRole.admin]: 'default',
-  [UserRole.user]: 'secondary',
-  [UserRole.guest]: 'outline',
+const ROLE_BADGE_VARIANTS: Record<string, string> = {
+  admin: 'bg-primary/10 text-primary',
+  staff: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+  delivery: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+  distributor: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
 };
 
-const emptyForm = {
-  email: '',
-  password: '',
-  role: UserRole.user as UserRole,
-};
-
-type UserForm = typeof emptyForm;
+const emptyForm = () => ({ email: '', password: '', role: 'staff' as AppRole });
 
 export default function UserManagementPage() {
-  const { data: users = [], isLoading } = useGetAllUsers();
-  const addUser = useAddUser();
-  const updateUser = useUpdateUser();
-  const deleteUser = useDeleteUser();
+  const { actor, isFetching: actorFetching } = useActor();
+  const { data: users = [], isLoading } = useAllUsers();
+  const addUserMutation = useAddUser();
+  const updateUserMutation = useUpdateUser();
+  const deleteUserMutation = useDeleteUser();
 
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [editingEmail, setEditingEmail] = useState<string | null>(null);
-  const [deletingEmail, setDeletingEmail] = useState<string | null>(null);
-  const [form, setForm] = useState<UserForm>(emptyForm);
+  const actorReady = !!actor && !actorFetching;
+
   const [search, setSearch] = useState('');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [deleteConfirmEmail, setDeleteConfirmEmail] = useState<string | null>(null);
+  const [form, setForm] = useState(emptyForm());
+  const [submitting, setSubmitting] = useState(false);
 
-  const isMutating = addUser.isPending || updateUser.isPending;
+  const filteredUsers = users.filter(
+    (u) =>
+      u.email.toLowerCase().includes(search.toLowerCase()) ||
+      (u.id && u.id.toLowerCase().includes(search.toLowerCase()))
+  );
 
   const openAdd = () => {
-    setEditingEmail(null);
-    setForm(emptyForm);
+    setEditingUser(null);
+    setForm(emptyForm());
     setDialogOpen(true);
   };
 
   const openEdit = (user: User) => {
-    setEditingEmail(user.email);
-    setForm({ email: user.email, password: '', role: user.role });
+    setEditingUser(user);
+    setForm({
+      email: user.email,
+      password: user.hashedPassword,
+      role: mapBackendRoleToAppRole(user.role) as AppRole,
+    });
     setDialogOpen(true);
   };
 
-  const openDelete = (email: string) => {
-    setDeletingEmail(email);
-    setDeleteDialogOpen(true);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.email.trim()) {
-      toast.error('Email is required');
+  const handleSubmit = async () => {
+    if (!form.email.trim() || !form.password.trim()) {
+      toast.error('Email and password are required');
       return;
     }
-    if (!editingEmail && !form.password.trim()) {
-      toast.error('Password is required for new users');
-      return;
-    }
-
-    const userData: User = {
-      email: form.email.trim().toLowerCase(),
-      hashedPassword: form.password ? `hashed_${form.password}` : (editingEmail ? users.find(u => u.email === editingEmail)?.hashedPassword || '' : ''),
-      role: form.role,
-    };
-
+    setSubmitting(true);
     try {
-      if (editingEmail) {
-        await updateUser.mutateAsync({ email: editingEmail, user: userData });
+      if (editingUser !== null) {
+        // For update, pass the full User object with the existing id
+        const updatedUser: User = {
+          id: editingUser.id,
+          email: editingUser.email,
+          hashedPassword: form.password,
+          role: mapAppRoleToBackendRole(form.role),
+        };
+        await updateUserMutation.mutateAsync({ email: editingUser.email, user: updatedUser });
         toast.success('User updated successfully');
       } else {
-        await addUser.mutateAsync(userData);
+        // For add, pass only the input fields — backend generates the id
+        const addInput: AddUserInput = {
+          email: form.email.trim().toLowerCase(),
+          hashedPassword: form.password,
+          role: mapAppRoleToBackendRole(form.role),
+        };
+        await addUserMutation.mutateAsync(addInput);
         toast.success('User added successfully');
       }
       setDialogOpen(false);
-      setForm(emptyForm);
     } catch (err: any) {
-      const msg = err?.message || String(err);
-      if (msg.includes('Only admins') || msg.includes('Unauthorized')) {
-        toast.error('Permission denied: Only admins can manage users.');
+      const msg = err?.message ?? String(err);
+      if (msg.includes('Unauthorized') || msg.includes('permission')) {
+        toast.error('Permission denied. Please log out and log back in.');
       } else if (msg.includes('already exists')) {
         toast.error('A user with this email already exists.');
       } else {
-        toast.error(`Failed: ${msg}`);
+        toast.error(`Failed to save user: ${msg}`);
       }
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!deletingEmail) return;
+    if (!deleteConfirmEmail) return;
     try {
-      await deleteUser.mutateAsync(deletingEmail);
+      await deleteUserMutation.mutateAsync(deleteConfirmEmail);
       toast.success('User deleted successfully');
-      setDeleteDialogOpen(false);
-      setDeletingEmail(null);
     } catch (err: any) {
-      const msg = err?.message || String(err);
-      if (msg.includes('Only admins') || msg.includes('Unauthorized')) {
-        toast.error('Permission denied: Only admins can delete users.');
-      } else {
-        toast.error(`Failed to delete user: ${msg}`);
-      }
+      toast.error(`Failed to delete user: ${err?.message ?? err}`);
+    } finally {
+      setDeleteConfirmEmail(null);
     }
   };
 
-  const filteredUsers = users.filter(
-    (u) =>
-      u.email.toLowerCase().includes(search.toLowerCase())
-  );
-
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">User Management</h1>
-          <p className="text-muted-foreground text-sm mt-1">Manage system users and roles</p>
+          <p className="text-muted-foreground text-sm mt-1">Manage system users and their roles</p>
         </div>
-        <Button onClick={openAdd} className="gap-2">
-          <Plus className="w-4 h-4" />
+        <Button onClick={openAdd} disabled={!actorReady} className="gap-2">
+          {actorFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
           Add User
         </Button>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between gap-4">
-            <CardTitle className="text-base">
-              All Users ({filteredUsers.length})
-            </CardTitle>
-            <Input
-              placeholder="Search users..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-xs"
-            />
-          </div>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Search users by email or ID..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
+      <Card className="card-shadow">
+        <CardHeader>
+          <CardTitle className="text-base">Users ({filteredUsers.length})</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {isLoading ? (
+          {isLoading || actorFetching ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
             </div>
           ) : filteredUsers.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
-              <Users className="w-10 h-10 opacity-30" />
-              <p className="text-sm">No users found</p>
+            <div className="text-center py-12 text-muted-foreground">
+              <Users className="w-8 h-8 mx-auto mb-2 opacity-40" />
+              No users found
             </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>#</TableHead>
+                    <TableHead className="w-[180px]">User ID</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Role</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead className="w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUsers.map((user, index) => (
-                    <TableRow key={user.email}>
-                      <TableCell className="text-muted-foreground">{index + 1}</TableCell>
-                      <TableCell className="font-medium">{user.email}</TableCell>
-                      <TableCell>
-                        <Badge variant={ROLE_VARIANTS[user.role] || 'outline'}>
-                          {ROLE_LABELS[user.role] || user.role}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openEdit(user)}
-                            className="h-8 w-8"
+                  {filteredUsers.map((user) => {
+                    const appRole = mapBackendRoleToAppRole(user.role);
+                    return (
+                      <TableRow key={user.email}>
+                        <TableCell>
+                          <span className="font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+                            {user.id || <span className="italic opacity-50">—</span>}
+                          </span>
+                        </TableCell>
+                        <TableCell className="font-medium">{user.email}</TableCell>
+                        <TableCell>
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              ROLE_BADGE_VARIANTS[appRole] ?? 'bg-muted text-muted-foreground'
+                            }`}
                           >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openDelete(user.email)}
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                            {ROLE_LABELS[appRole] ?? appRole}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => openEdit(user)}
+                              disabled={!actorReady}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => setDeleteConfirmEmail(user.email)}
+                              disabled={!actorReady}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -247,91 +255,80 @@ export default function UserManagementPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingEmail ? 'Edit User' : 'Add New User'}</DialogTitle>
-            <DialogDescription>
-              {editingEmail ? 'Update user information' : 'Create a new system user'}
-            </DialogDescription>
+            <DialogTitle>{editingUser !== null ? 'Edit User' : 'Add New User'}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="userEmail">Email *</Label>
+          <div className="grid gap-4 py-2">
+            {editingUser && (
+              <div className="grid gap-1.5">
+                <Label className="text-muted-foreground text-xs">User ID</Label>
+                <p className="font-mono text-xs bg-muted px-3 py-2 rounded border border-border">
+                  {editingUser.id}
+                </p>
+              </div>
+            )}
+            <div className="grid gap-1.5">
+              <Label>Email *</Label>
               <Input
-                id="userEmail"
                 type="email"
                 value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="user@vitalist.com"
-                disabled={!!editingEmail}
-                required
+                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                disabled={editingUser !== null}
+                placeholder="user@example.com"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="userPassword">
-                Password {editingEmail ? '(leave blank to keep current)' : '*'}
-              </Label>
+            <div className="grid gap-1.5">
+              <Label>Password *</Label>
               <Input
-                id="userPassword"
-                type="password"
+                type="text"
                 value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                placeholder="••••••••"
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                placeholder="Enter password"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="userRole">Role *</Label>
+            <div className="grid gap-1.5">
+              <Label>Role *</Label>
               <Select
                 value={form.role}
-                onValueChange={(val) => setForm({ ...form, role: val as UserRole })}
+                onValueChange={(val) => setForm((f) => ({ ...f, role: val as AppRole }))}
               >
-                <SelectTrigger id="userRole">
+                <SelectTrigger>
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={UserRole.admin}>Admin</SelectItem>
-                  <SelectItem value={UserRole.user}>Staff</SelectItem>
-                  <SelectItem value={UserRole.guest}>Delivery</SelectItem>
+                  {ROLE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={isMutating}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isMutating}>
-                {isMutating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : editingEmail ? 'Update User' : 'Add User'}
-              </Button>
-            </DialogFooter>
-          </form>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit} disabled={submitting}>
+              {submitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              {editingUser !== null ? 'Update' : 'Add'} User
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      {/* Delete Confirm */}
+      <AlertDialog open={deleteConfirmEmail !== null} onOpenChange={(o) => !o && setDeleteConfirmEmail(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete User</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete <strong>{deletingEmail}</strong>? This action cannot be undone.
+              Are you sure you want to delete <strong>{deleteConfirmEmail}</strong>? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteUser.isPending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              disabled={deleteUser.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteUser.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Deleting...
-                </>
-              ) : 'Delete'}
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1,85 +1,75 @@
 {
   "kind": "build_request",
-  "title": "Add Distributor Delivery Data (Admin → Distributor Panel) and Fix Add Store Map",
+  "title": "Fix newly added users: missing user ID display in panel and login failure",
   "projectName": "Vitalist Water",
   "priority": "high",
   "requirements": [
     {
-      "id": "REQ-16",
-      "text": "Add a 'Distributor Delivery Data' management section in the Admin panel. Admin can create, edit, and delete distributor delivery records. Each record stores: Order ID (linked to an existing order), Truck Number, Driver Name, Driver Contact Number, Distributor (linked user with 'distributor' role), Estimated Delivery Date/Time, and any additional Notes. The backend must persist these records and expose query functions to list all records (admin) and filter by distributor user (distributor role).",
+      "id": "REQ-35",
+      "text": "Fix the backend addUser function in main.mo so that when a new user is successfully created, a valid and unique user ID is generated and stored with the user record. The returned user object must include the assigned user ID. Ensure the ID is not empty, null, or undefined after creation.",
+      "target": "backend",
+      "source": {
+        "messageIds": [
+          "msg-1"
+        ],
+        "quotes": [
+          "after the user will be added the user id is not showing"
+        ]
+      },
+      "acceptanceCriteria": [
+        "When admin creates a new user via addUser, the backend assigns and persists a non-empty unique user ID to the record.",
+        "The addUser function returns the newly created user record including the generated user ID.",
+        "No user record exists in the backend store with a missing or empty ID after creation."
+      ]
+    },
+    {
+      "id": "REQ-36",
+      "text": "Fix the UserManagementPage.tsx user table so that after a new user is created, the user's ID is correctly displayed in the user list/table panel. The table must render the user ID column value for every user row, including newly created users.",
+      "target": "frontend",
+      "source": {
+        "messageIds": [
+          "msg-1"
+        ],
+        "quotes": [
+          "after the user will be added the user id is not showing panela"
+        ]
+      },
+      "acceptanceCriteria": [
+        "After successfully adding a user, the user table refreshes and shows the new user's ID in the ID column.",
+        "No user row in the table displays a blank, undefined, or missing ID value.",
+        "The user list re-fetches (React Query invalidation) immediately after a successful addUser mutation so the new record appears without a manual page reload."
+      ]
+    },
+    {
+      "id": "REQ-37",
+      "text": "Fix the login flow so that newly created users (added via the Admin's Add User form) can successfully log in with their assigned email and password. Audit the backend login function in main.mo to ensure it looks up users by email against the full users map (including dynamically added users, not just pre-seeded accounts), verifies the hashed password correctly, and returns a valid session token and role on success. Ensure AuthContext.tsx correctly processes the login response and stores the token and role in sessionStorage.",
       "target": "both",
       "source": {
         "messageIds": [
-          "msg-recent-1"
+          "msg-1"
         ],
         "quotes": [
-          "in admin panel there is a option of add distibutor delivery data",
-          "and as they fill its show in distibutor panel"
+          "they cant login"
         ]
       },
       "acceptanceCriteria": [
-        "Admin panel has an 'Add Distributor Delivery Data' form with fields: Order ID (dropdown or searchable from existing orders), Truck Number, Driver Name, Driver Contact Number, Distributor (dropdown of users with distributor role), Estimated Delivery Date/Time, and Notes.",
-        "Admin can add, edit, and delete distributor delivery records from a dedicated table/list.",
-        "Backend stores distributor delivery records in a stable map and enforces that only admins can create/update/delete them.",
-        "A query function returns distributor delivery records filtered by the logged-in distributor's user ID so each distributor only sees their own assignments.",
-        "The distributor delivery record is linked to an order and displays: Order ID, Truck Number, Driver Name, Driver Contact, Estimated Delivery Date/Time, and current order status."
-      ]
-    },
-    {
-      "id": "REQ-17",
-      "text": "Create a Distributor portal/panel (accessible only to users with the 'distributor' role) that displays all distributor delivery records assigned to the logged-in distributor. Each card/row shows: Order ID, linked Store Name, Truck Number, Driver Name, Driver Contact Number, Estimated Delivery Date/Time, and current Order Status. The distributor can mark an order as 'Truck Arrived' once they have received the delivery at their location. The panel must be mobile-responsive.",
-      "target": "frontend",
-      "source": {
-        "messageIds": [
-          "msg-recent-1"
-        ],
-        "quotes": [
-          "as they fill its show in distibutor panel",
-          "after they get the delivery at there location they mark as truck arrived"
-        ]
-      },
-      "acceptanceCriteria": [
-        "A dedicated Distributor Dashboard page is accessible only when the logged-in user has the 'distributor' role; other roles are redirected.",
-        "The page fetches distributor delivery records assigned to the current distributor and renders them as cards or table rows.",
-        "Each entry displays: Order ID, Store Name, Truck Number, Driver Name, Driver Contact, Estimated Delivery Date/Time, and Order Status badge.",
-        "Each entry has a 'Mark Truck Arrived' button that, when clicked, updates the distributor delivery record status to 'Truck Arrived' in the backend; the button is disabled/hidden after already marked.",
-        "The layout is fully responsive and optimized for mobile screens.",
-        "The Distributor role is added to sidebar navigation so that Distributor users only see the Distributor Dashboard nav item."
-      ]
-    },
-    {
-      "id": "REQ-18",
-      "text": "Fix the 'Add Store' and 'Edit Store' map functionality in StoreManagementPage.tsx. The map preview and coordinate display must correctly render using the browser Geolocation API for 'Use Current Location', and the manual coordinate input fields (Latitude, Longitude) must be editable and kept in sync with the map display. Remove any dependency on external map tile providers that may be blocked or broken; use an OpenStreetMap iframe embed or a plain coordinate display with a Leaflet/static map fallback so the map always renders without errors.",
-      "target": "frontend",
-      "source": {
-        "messageIds": [
-          "msg-recent-1"
-        ],
-        "quotes": [
-          "there is a issue in add store with map please resolve this"
-        ]
-      },
-      "acceptanceCriteria": [
-        "Opening the Add Store or Edit Store dialog no longer shows a broken/blank map area or console errors related to the map.",
-        "The 'Use Current Location' button successfully requests the browser geolocation, then populates the Latitude and Longitude fields and updates the map preview accordingly.",
-        "Manual edits to the Latitude and Longitude input fields update the map preview in real time.",
-        "The map embed or coordinate display renders correctly in all modern browsers without relying on any API key or blocked external service.",
-        "Store save/update works correctly after using the location picker."
+        "A user created via the Add User form can log in immediately after creation using the email and password provided during creation.",
+        "The backend login function finds dynamically added users by email (not only pre-seeded users).",
+        "On successful login, a session token and the user's role are returned and stored in sessionStorage by AuthContext.tsx.",
+        "After login, the newly created user is routed to the page appropriate for their role (Staff → Order Creation, Delivery → Delivery Dashboard, Distributor → Distributor Dashboard, Admin → Dashboard).",
+        "No 'invalid credentials' or 'user not found' error is shown for a valid newly created account."
       ]
     }
   ],
   "constraints": [
-    "Do not modify frontend/src/hooks/useInternetIdentity.ts, frontend/src/hooks/useActor.ts, frontend/src/main.tsx, or any files under frontend/src/components/ui.",
-    "All backend logic must remain in the single actor in backend/main.mo.",
-    "Distributor delivery records must be stored in a stable backend data structure with appropriate role-based access control.",
-    "The 'Mark Truck Arrived' action must be validated server-side to ensure only the assigned distributor can trigger it."
+    "Do not change the existing pre-seeded demo accounts (admin@vitalist.com, staff@vitalist.com, delivery@vitalist.com, shajan@vitalist.com).",
+    "Do not break the existing session-based auth pattern — token/email/role stored in sessionStorage must remain the auth mechanism.",
+    "Frontend immutable paths (useInternetIdentity.ts, useActor.ts, main.tsx, components/ui) must not be modified."
   ],
   "nonGoals": [
-    "Barcode scanning and truck-loaded/unloaded image upload for the distributor (deferred to a separate request).",
-    "Real-time WebSocket push updates between admin and distributor panels.",
-    "Changing the existing 4-stage QR delivery workflow for other roles.",
-    "Any financial or profit reporting module.",
-    "Changing the existing order approval or QR code generation logic."
+    "Changing the password hashing algorithm or auth mechanism.",
+    "Adding new user roles beyond the existing four (Admin, Staff, Delivery, Distributor).",
+    "Modifying the QR workflow, order creation flow, or store management."
   ],
   "imageRequirements": {
     "required": [],

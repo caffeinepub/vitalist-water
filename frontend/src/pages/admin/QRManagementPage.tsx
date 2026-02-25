@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
-import { useGetAllOrders, useGetAllStores } from '../../hooks/useQueries';
+import { useAllOrders, useAllStores } from '../../hooks/useQueries';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import StatusBadge from '../../components/orders/StatusBadge';
 import QRCodeDisplay from '../../components/qr/QRCodeDisplay';
-import { Search, QrCode, Package, CheckCircle } from 'lucide-react';
+import { Search, QrCode, CheckCircle } from 'lucide-react';
 import { parseOrderMeta } from '../../utils/orderUtils';
 
 export default function QRManagementPage() {
-  const { data: orders = [], isLoading } = useGetAllOrders();
-  const { data: stores = [] } = useGetAllStores();
+  const { data: orders = [], isLoading } = useAllOrders();
+  const { data: stores = [] } = useAllStores();
   const [search, setSearch] = useState('');
 
   const approvedOrders = orders.filter((o) => {

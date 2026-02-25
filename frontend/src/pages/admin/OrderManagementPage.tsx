@@ -1,154 +1,143 @@
 import React, { useState } from 'react';
-import { toast } from 'sonner';
-import { CheckCircle, XCircle, Loader2, Package, Search } from 'lucide-react';
+import { useAllOrders, useUpdateOrder, useAllStores } from '../../hooks/useQueries';
+import { useActor } from '../../hooks/useActor';
+import { OrderRecord } from '../../backend';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { useGetAllOrders, useUpdateOrder, useGetAllStores } from '../../hooks/useQueries';
-import type { OrderRecord } from '../../backend';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { CheckCircle, XCircle, Truck, Package, Search, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
-const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'outline' | 'destructive'> = {
-  pending: 'secondary',
-  approved: 'default',
-  cancelled: 'destructive',
-  dispatched: 'outline',
-  delivered: 'default',
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'Pending',
-  approved: 'Approved',
-  cancelled: 'Cancelled',
-  dispatched: 'Dispatched',
-  'out-for-delivery': 'Out for Delivery',
-  delivered: 'Delivered',
+const STATUS_COLORS: Record<string, string> = {
+  'Pending Approval': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+  'Approved': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+  'Dispatched': 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
+  'Out for Delivery': 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+  'Delivered': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+  'Cancelled': 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
 };
 
 export default function OrderManagementPage() {
-  const { data: orders = [], isLoading } = useGetAllOrders();
-  const { data: stores = [] } = useGetAllStores();
-  const updateOrder = useUpdateOrder();
+  const { actor, isFetching: actorFetching } = useActor();
+  const { data: orders = [], isLoading: ordersLoading } = useAllOrders();
+  const { data: stores = [] } = useAllStores();
+  const updateOrderMutation = useUpdateOrder();
 
   const [search, setSearch] = useState('');
-  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
-  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [loadingOrderId, setLoadingOrderId] = useState<string | null>(null);
+
+  const actorReady = !!actor && !actorFetching;
 
   const getStoreName = (storeId: bigint) => {
-    const idx = Number(storeId) - 1;
-    return stores[idx]?.storeName || `Store #${storeId}`;
+    const store = stores.find((s, idx) => BigInt(idx + 1) === storeId);
+    return store?.storeName ?? `Store #${storeId}`;
   };
 
-  const handleApprove = async (order: OrderRecord) => {
-    setApprovingId(order.orderId);
+  const filteredOrders = orders.filter((o) => {
+    const matchesSearch =
+      o.orderId.toLowerCase().includes(search.toLowerCase()) ||
+      getStoreName(o.storeId).toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === 'All' || o.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const handleStatusChange = async (order: OrderRecord, newStatus: string) => {
+    if (!actorReady) {
+      toast.error('System is initializing. Please wait a moment and try again.');
+      return;
+    }
+    setLoadingOrderId(order.orderId);
     try {
-      await updateOrder.mutateAsync({
+      await updateOrderMutation.mutateAsync({
         orderId: order.orderId,
-        order: { ...order, status: 'approved' },
+        order: { ...order, status: newStatus },
       });
-      toast.success(`Order ${order.orderId} approved`);
+      toast.success(`Order ${order.orderId} status updated to ${newStatus}`);
     } catch (err: any) {
-      const msg = err?.message || String(err);
-      if (msg.includes('Only admins') || msg.includes('Unauthorized')) {
-        toast.error('Permission denied: Only admins can approve orders.');
+      const msg = err?.message ?? String(err);
+      if (msg.includes('Unauthorized') || msg.includes('permission')) {
+        toast.error('Permission denied. Please log out and log back in.');
       } else {
-        toast.error(`Failed to approve order: ${msg}`);
+        toast.error(`Failed to update order: ${msg}`);
       }
     } finally {
-      setApprovingId(null);
+      setLoadingOrderId(null);
     }
   };
 
-  const openCancelDialog = (orderId: string) => {
-    setCancellingOrderId(orderId);
-    setCancelDialogOpen(true);
-  };
-
-  const handleCancel = async () => {
-    if (!cancellingOrderId) return;
-    const order = orders.find((o) => o.orderId === cancellingOrderId);
-    if (!order) return;
-
-    try {
-      await updateOrder.mutateAsync({
-        orderId: order.orderId,
-        order: { ...order, status: 'cancelled' },
-      });
-      toast.success(`Order ${order.orderId} cancelled`);
-      setCancelDialogOpen(false);
-      setCancellingOrderId(null);
-    } catch (err: any) {
-      const msg = err?.message || String(err);
-      if (msg.includes('Only admins') || msg.includes('Unauthorized')) {
-        toast.error('Permission denied: Only admins can cancel orders.');
-      } else {
-        toast.error(`Failed to cancel order: ${msg}`);
-      }
-    }
-  };
-
-  const filteredOrders = orders.filter(
-    (o) =>
-      o.orderId.toLowerCase().includes(search.toLowerCase()) ||
-      getStoreName(o.storeId).toLowerCase().includes(search.toLowerCase()) ||
-      o.status.toLowerCase().includes(search.toLowerCase())
-  );
+  const isLoading = ordersLoading || actorFetching;
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Order Management</h1>
-          <p className="text-muted-foreground text-sm mt-1">Review and manage all orders</p>
+          <p className="text-muted-foreground text-sm mt-1">Approve, dispatch, and manage all orders</p>
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between gap-4">
-            <CardTitle className="text-base">
-              All Orders ({filteredOrders.length})
-            </CardTitle>
-            <div className="relative max-w-xs w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search orders..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-          </div>
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {['Pending Approval', 'Approved', 'Dispatched', 'Delivered'].map((status) => (
+          <Card key={status} className="card-shadow">
+            <CardContent className="pt-4 pb-4">
+              <p className="text-xs text-muted-foreground">{status}</p>
+              <p className="text-2xl font-bold text-foreground mt-1">
+                {orders.filter((o) => o.status === status).length}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search orders..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {['All', 'Pending Approval', 'Approved', 'Dispatched', 'Delivered', 'Cancelled'].map((s) => (
+            <Button
+              key={s}
+              variant={statusFilter === s ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setStatusFilter(s)}
+            >
+              {s}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      {/* Table */}
+      <Card className="card-shadow">
+        <CardHeader>
+          <CardTitle className="text-base">
+            Orders ({filteredOrders.length})
+            {!actorReady && (
+              <span className="ml-2 text-xs text-muted-foreground font-normal">
+                <Loader2 className="inline w-3 h-3 animate-spin mr-1" />
+                Initializing…
+              </span>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
             </div>
           ) : filteredOrders.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
-              <Package className="w-10 h-10 opacity-30" />
-              <p className="text-sm">No orders found</p>
-            </div>
+            <div className="text-center py-12 text-muted-foreground">No orders found</div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -158,69 +147,109 @@ export default function OrderManagementPage() {
                     <TableHead>Store</TableHead>
                     <TableHead>Qty</TableHead>
                     <TableHead>Rate</TableHead>
-                    <TableHead>Total</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Notes</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredOrders.map((order) => {
-                    const isApproving = approvingId === order.orderId;
-                    const isCancelling = updateOrder.isPending && cancellingOrderId === order.orderId;
-                    const total = (Number(order.quantity) * order.rate).toFixed(2);
-
+                    const isRowLoading = loadingOrderId === order.orderId;
                     return (
                       <TableRow key={order.orderId}>
-                        <TableCell className="font-mono text-sm font-medium">{order.orderId}</TableCell>
-                        <TableCell className="text-sm">{getStoreName(order.storeId)}</TableCell>
-                        <TableCell>{Number(order.quantity)}</TableCell>
+                        <TableCell className="font-mono text-xs">{order.orderId}</TableCell>
+                        <TableCell>{getStoreName(order.storeId)}</TableCell>
+                        <TableCell>{order.quantity.toString()}</TableCell>
                         <TableCell>₹{order.rate.toFixed(2)}</TableCell>
-                        <TableCell className="font-medium">₹{total}</TableCell>
                         <TableCell>
-                          <Badge variant={STATUS_VARIANTS[order.status] || 'outline'}>
-                            {STATUS_LABELS[order.status] || order.status}
-                          </Badge>
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              STATUS_COLORS[order.status] ?? 'bg-muted text-muted-foreground'
+                            }`}
+                          >
+                            {order.status}
+                          </span>
                         </TableCell>
-                        <TableCell className="text-sm text-muted-foreground max-w-[120px] truncate">
-                          {order.notes || '—'}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {order.status === 'pending' && (
+                        <TableCell>
+                          <div className="flex gap-1 flex-wrap">
+                            {order.status === 'Pending Approval' && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-green-600 border-green-300 hover:bg-green-50"
+                                  disabled={isRowLoading || !actorReady}
+                                  onClick={() => handleStatusChange(order, 'Approved')}
+                                >
+                                  {isRowLoading ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <CheckCircle className="w-3 h-3 mr-1" />
+                                  )}
+                                  Approve
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-red-600 border-red-300 hover:bg-red-50"
+                                  disabled={isRowLoading || !actorReady}
+                                  onClick={() => handleStatusChange(order, 'Cancelled')}
+                                >
+                                  {isRowLoading ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <XCircle className="w-3 h-3 mr-1" />
+                                  )}
+                                  Cancel
+                                </Button>
+                              </>
+                            )}
+                            {order.status === 'Approved' && (
                               <Button
-                                variant="ghost"
                                 size="sm"
-                                onClick={() => handleApprove(order)}
-                                disabled={isApproving || updateOrder.isPending}
-                                className="h-8 gap-1 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                variant="outline"
+                                className="text-purple-600 border-purple-300 hover:bg-purple-50"
+                                disabled={isRowLoading || !actorReady}
+                                onClick={() => handleStatusChange(order, 'Dispatched')}
                               >
-                                {isApproving ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                {isRowLoading ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
                                 ) : (
-                                  <CheckCircle className="w-3.5 h-3.5" />
+                                  <Truck className="w-3 h-3 mr-1" />
                                 )}
-                                Approve
+                                Dispatch
                               </Button>
                             )}
-                            {(order.status === 'pending' || order.status === 'approved') && (
+                            {order.status === 'Dispatched' && (
                               <Button
-                                variant="ghost"
                                 size="sm"
-                                onClick={() => openCancelDialog(order.orderId)}
-                                disabled={isCancelling || updateOrder.isPending}
-                                className="h-8 gap-1 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                variant="outline"
+                                className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                                disabled={isRowLoading || !actorReady}
+                                onClick={() => handleStatusChange(order, 'Out for Delivery')}
                               >
-                                {isCancelling ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                {isRowLoading ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
                                 ) : (
-                                  <XCircle className="w-3.5 h-3.5" />
+                                  <Package className="w-3 h-3 mr-1" />
                                 )}
-                                Cancel
+                                Out for Delivery
                               </Button>
                             )}
-                            {order.status !== 'pending' && order.status !== 'approved' && (
-                              <span className="text-xs text-muted-foreground">—</span>
+                            {order.status === 'Out for Delivery' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-green-600 border-green-300 hover:bg-green-50"
+                                disabled={isRowLoading || !actorReady}
+                                onClick={() => handleStatusChange(order, 'Delivered')}
+                              >
+                                {isRowLoading ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                )}
+                                Delivered
+                              </Button>
                             )}
                           </div>
                         </TableCell>
@@ -233,33 +262,6 @@ export default function OrderManagementPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Cancel Confirmation */}
-      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Cancel Order</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to cancel order <strong>{cancellingOrderId}</strong>? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={updateOrder.isPending}>Keep Order</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleCancel}
-              disabled={updateOrder.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {updateOrder.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Cancelling...
-                </>
-              ) : 'Cancel Order'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

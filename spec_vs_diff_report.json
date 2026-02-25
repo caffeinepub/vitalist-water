@@ -1,56 +1,26 @@
 {
   "kind": "spec_vs_diff_report",
   "version": "1.0",
-  "generatedAt": "2026-02-25T06:42:02.372Z",
-  "summary": "The diff implements most of REQ-16, REQ-17, and REQ-18. Backend DistributorDelivery data structure is added, admin CRUD page is created, distributor dashboard is created, sidebar is updated, and the store map is fixed using an OpenStreetMap iframe. However, several specific acceptance criteria have gaps: the 'Mark Truck Arrived' action lacks confirmed server-side validation ensuring only the assigned distributor can trigger it; the distributor filtering in the admin form uses incorrect role logic ('guest' instead of 'distributor'); and full backend access control enforcement for distributor delivery CRUD is not confirmed in the truncated diff.",
-  "missing_requirements": [
-    {
-      "id": "REQ-16",
-      "requirement": "Backend enforces that only admins can create/update/delete distributor delivery records.",
-      "reason": "The diff shows backend/main.mo is modified and the DistributorDelivery type is added, but the truncated content does not confirm access control checks (admin-only) are applied to create/update/delete distributor delivery endpoints.",
-      "evidence": [
-        "backend/main.mo"
-      ]
-    },
-    {
-      "id": "REQ-17",
-      "requirement": "The 'Mark Truck Arrived' action must be validated server-side to ensure only the assigned distributor can trigger it.",
-      "reason": "The DistributorDashboard calls useUpdateDistributorDelivery, but there is no evidence in the diff that the backend enforces that only the assigned distributor principal can mark truck arrived. The build request constraints explicitly state this must be server-side validated.",
-      "evidence": [
-        "frontend/src/pages/distributor/DistributorDashboard.tsx",
-        "backend/main.mo"
-      ]
-    },
-    {
-      "id": "REQ-16",
-      "requirement": "Distributor dropdown in admin form must show only users with the 'distributor' role.",
-      "reason": "In DistributorDeliveryManagementPage.tsx, the filter uses u.role === 'guest' || (u as any).role === 'distributor', which incorrectly includes 'guest' role users instead of filtering strictly for 'distributor' role.",
-      "evidence": [
-        "frontend/src/pages/admin/DistributorDeliveryManagementPage.tsx"
-      ]
-    }
-  ],
+  "generatedAt": "2026-02-25T09:38:16.823Z",
+  "summary": "The diff addresses all three requirements. REQ-35 is handled by adding a userIdCounter and generateUserId() in main.mo with a migration module. REQ-36 is handled by updating UserManagementPage.tsx to display user IDs and invalidate queries. REQ-37 is handled by updating AuthContext.tsx to call actor.login() instead of hardcoded credentials, and main.mo's login function looks up users from the full users map. All core acceptance criteria appear to be met.",
+  "missing_requirements": [],
   "hallucinated_features": [
     {
-      "description": "A separate backend/migration.mo module file was created to handle data migration for the new distributorDeliveries stable map.",
-      "reason": "The build request does not mention a migration module or file. The constraints only require backend logic to remain in the single actor in backend/main.mo.",
+      "description": "A migration module (backend/migration.mo) was added that migrates old user records without an 'id' field by setting id = email. This migration approach for pre-existing data was not requested in any requirement.",
+      "reason": "The build request only asks for new users to have a generated ID. The migration module addresses existing records but was not specified as a requirement.",
       "evidence": [
         "backend/migration.mo"
       ]
     }
   ],
-  "confidence": 0.72,
+  "confidence": 0.82,
   "changed_files": [
     "backend/main.mo",
     "backend/migration.mo",
     "frontend-file-summaries.txt",
-    "frontend/src/App.tsx",
-    "frontend/src/components/layout/AppSidebar.tsx",
     "frontend/src/contexts/AuthContext.tsx",
     "frontend/src/hooks/useQueries.ts",
-    "frontend/src/pages/admin/DistributorDeliveryManagementPage.tsx",
-    "frontend/src/pages/admin/StoreManagementPage.tsx",
-    "frontend/src/pages/distributor/DistributorDashboard.tsx",
+    "frontend/src/pages/admin/UserManagementPage.tsx",
     "project_state.json"
   ]
 }
