@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
-  "projectStateVersion": 3,
-  "summary": "Vitalist Water — Order & Delivery Management System. Enterprise-grade web app managing the full order-to-delivery lifecycle for a water distribution business. Features role-based access control (Admin, Staff, Delivery), GPS store mapping, automated invoice generation, encrypted QR code workflow, camera-based QR scanning, 4-stage controlled delivery workflow, and date-based reporting. No financial/profit module included.",
+  "projectStateVersion": 9,
+  "summary": "Vitalist Water — Order & Delivery Management System. Enterprise-grade web app managing the full order-to-delivery lifecycle for a water distribution business. Features role-based access control (Admin, Staff, Delivery, Distributor), GPS store mapping, automated invoice generation, encrypted QR code workflow, camera-based QR scanning, 4-stage controlled delivery workflow, date-based reporting, and a Distributor portal for tracking deliveries with truck/driver info, barcode scanning, and image uploads. No financial/profit module included.",
   "architectural_notes": [
     "No financial/profit module — intentionally excluded from scope",
     "Order IDs are auto-incremented in format VW-YYYY-XXXX and cannot be manually edited",
@@ -9,11 +9,16 @@
     "All 4 delivery stages require camera-based QR scanning; no manual QR entry permitted",
     "GPS location must be captured at Stage 3 (Delivery Start) and Stage 4 (Delivery Complete)",
     "Orders are permanently locked after Stage 4 completion — no re-scan or modification allowed",
-    "All workflow stages log timestamps; duplicate scans are blocked at every stage"
+    "All workflow stages log timestamps; duplicate scans are blocked at every stage",
+    "Distributor is a 4th role — Admin generates distributor credentials; distributors track their own deliveries via a dedicated portal",
+    "Admin can input distributor delivery data (truck no, driver contact) which surfaces in the Distributor panel"
   ],
-  "known_issues": [],
-  "isFixRequest": false,
-  "imageRequirements": "## Required Images\n- Vitalist Water brand logo — a clean water droplet icon with bold wordmark 'VITALIST WATER' in deep ocean blue and aqua, suitable for sidebar and invoice header (vitalist-logo.dim_320x80.png)\n- Water droplet icon in solid aqua blue for favicon and app icon usage (vitalist-icon.dim_64x64.png)",
+  "known_issues": [
+    "Sidebar navigation options are not visible by default — they only appear on hover/focus; sidebar should show all options visibly at all times",
+    "Admin panel shows 'only admin can add/edit' error when attempting to add/edit stores or other records — role detection or permission check is incorrectly blocking admin actions",
+    "Add Store map is broken or non-functional — needs investigation and fix"
+  ],
+  "isFixRequest": true,
   "existing_features": [
     {
       "id": "feature-implement-a-role-based-authentication-system-with-three-roles-admin-staff-and-delivery-store-users-in-the-backend-with-email-hashed-password-and-role-pre-seed-three-demo-accounts-admin-vitalist-com-india-123-admin-staff-vitalist-com-india-123-staff-delivery-vitalist-com-india-123-delivery-on-login-return-a-session-token-and-role-enforce-role-based-route-guards-on-the-frontend-so-each-role-only-accesses-permitted-pages-admin-can-add-edit-and-delete-user-accounts",
@@ -84,6 +89,46 @@
       "title": "Apply a cohesive visual theme across the entire application: water-blue primary palette (deep ocean blues and clear aqua accents), clean white backgrounds, subtle soft-shadow cards, bold sans-serif typography, smooth hover and transition animations, and a professional distribution SaaS aesthetic. The Vitalist Water brand name and logo/wordmark should appear in the sidebar header and on invoices.",
       "reqIds": [
         "REQ-12"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-fix-the-sidebar-navigation-in-appsidebar-tsx-and-layout-tsx-so-that-all-navigation-items-dashboard-stores-orders-invoices-qr-management-reports-settings-are-fully-visible-at-all-times-by-default-not-hidden-or-invisible-until-hovered-focused-remove-any-css-or-tailwind-classes-that-hide-nav-item-labels-icons-or-the-sidebar-itself-in-its-default-non-collapsed-state-ensure-text-labels-icons-and-active-inactive-states-are-always-rendered-with-sufficient-color-contrast-and-opacity-no-opacity-0-invisible-or-transparent-styling-on-nav-items-unless-the-sidebar-is-explicitly-in-a-user-toggled-collapsed-state-on-mobile",
+      "title": "Fix the sidebar navigation in AppSidebar.tsx and Layout.tsx so that all navigation items (Dashboard, Stores, Orders, Invoices, QR Management, Reports, Settings) are fully visible at all times by default — not hidden or invisible until hovered/focused. Remove any CSS or Tailwind classes that hide nav item labels, icons, or the sidebar itself in its default (non-collapsed) state. Ensure text labels, icons, and active/inactive states are always rendered with sufficient color contrast and opacity (no opacity-0, invisible, or transparent styling on nav items unless the sidebar is explicitly in a user-toggled collapsed state on mobile).",
+      "reqIds": [
+        "REQ-13"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-fix-the-frontend-authcontext-and-any-permission-guard-logic-in-storemanagementpage-tsx-usermanagementpage-tsx-ordermanagementpage-tsx-and-any-other-admin-pages-so-that-the-current-user-s-role-is-correctly-read-and-passed-to-backend-calls-ensure-the-session-token-and-role-stored-in-sessionstorage-are-correctly-read-back-on-page-load-refresh-and-that-all-admin-action-buttons-add-edit-delete-approve-cancel-are-enabled-and-functional-for-the-admin-role-without-being-gated-by-a-faulty-role-check",
+      "title": "Fix the frontend AuthContext and any permission-guard logic in StoreManagementPage.tsx, UserManagementPage.tsx, OrderManagementPage.tsx, and any other admin pages so that the current user's role is correctly read and passed to backend calls. Ensure the session token and role stored in sessionStorage are correctly read back on page load/refresh and that all admin action buttons (Add, Edit, Delete, Approve, Cancel) are enabled and functional for the admin role without being gated by a faulty role check.",
+      "reqIds": [
+        "REQ-15"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-add-a-distributor-delivery-data-management-section-in-the-admin-panel-admin-can-create-edit-and-delete-distributor-delivery-records-each-record-stores-order-id-linked-to-an-existing-order-truck-number-driver-name-driver-contact-number-distributor-linked-user-with-distributor-role-estimated-delivery-date-time-and-any-additional-notes-the-backend-must-persist-these-records-and-expose-query-functions-to-list-all-records-admin-and-filter-by-distributor-user-distributor-role",
+      "title": "Add a 'Distributor Delivery Data' management section in the Admin panel. Admin can create, edit, and delete distributor delivery records. Each record stores: Order ID (linked to an existing order), Truck Number, Driver Name, Driver Contact Number, Distributor (linked user with 'distributor' role), Estimated Delivery Date/Time, and any additional Notes. The backend must persist these records and expose query functions to list all records (admin) and filter by distributor user (distributor role).",
+      "reqIds": [
+        "REQ-16"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-create-a-distributor-portal-panel-accessible-only-to-users-with-the-distributor-role-that-displays-all-distributor-delivery-records-assigned-to-the-logged-in-distributor-each-card-row-shows-order-id-linked-store-name-truck-number-driver-name-driver-contact-number-estimated-delivery-date-time-and-current-order-status-the-distributor-can-mark-an-order-as-truck-arrived-once-they-have-received-the-delivery-at-their-location-the-panel-must-be-mobile-responsive",
+      "title": "Create a Distributor portal/panel (accessible only to users with the 'distributor' role) that displays all distributor delivery records assigned to the logged-in distributor. Each card/row shows: Order ID, linked Store Name, Truck Number, Driver Name, Driver Contact Number, Estimated Delivery Date/Time, and current Order Status. The distributor can mark an order as 'Truck Arrived' once they have received the delivery at their location. The panel must be mobile-responsive.",
+      "reqIds": [
+        "REQ-17"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-fix-the-add-store-and-edit-store-map-functionality-in-storemanagementpage-tsx-the-map-preview-and-coordinate-display-must-correctly-render-using-the-browser-geolocation-api-for-use-current-location-and-the-manual-coordinate-input-fields-latitude-longitude-must-be-editable-and-kept-in-sync-with-the-map-display-remove-any-dependency-on-external-map-tile-providers-that-may-be-blocked-or-broken-use-an-openstreetmap-iframe-embed-or-a-plain-coordinate-display-with-a-leaflet-static-map-fallback-so-the-map-always-renders-without-errors",
+      "title": "Fix the 'Add Store' and 'Edit Store' map functionality in StoreManagementPage.tsx. The map preview and coordinate display must correctly render using the browser Geolocation API for 'Use Current Location', and the manual coordinate input fields (Latitude, Longitude) must be editable and kept in sync with the map display. Remove any dependency on external map tile providers that may be blocked or broken; use an OpenStreetMap iframe embed or a plain coordinate display with a Leaflet/static map fallback so the map always renders without errors.",
+      "reqIds": [
+        "REQ-18"
       ],
       "version": 1
     }
@@ -177,6 +222,38 @@
       "reqIds": [
         "REQ-11"
       ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-23",
+      "summary": "Fix the backend role-based access control in backend/main.mo so that when an authenticated admin user calls addStore, updateStore, deleteStore, addUser, updateUser, deleteUser, approveOrder, cancelOrder, or any other admin-restricted function, the caller's role is correctly resolved to 'admin' and the operation is permitted without returning an 'only admin can add/edit' error. Investigate whether the caller principal is being matched correctly to the stored user record and whether the MixinAuthorization check is comparing the right identity.",
+      "reqIds": [
+        "REQ-14"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-24",
+      "summary": "Add Distributor role: Admin can generate distributor login credentials. Distributor portal shows delivery tracking (order location, truck number, driver contact). Distributor scans barcode and uploads images of truck loaded/unloaded, then marks 'truck arrived' after delivery at their location.",
+      "reqIds": [],
+      "status": "pending"
+    },
+    {
+      "id": "AR-25",
+      "summary": "Admin panel: Add 'Add Distributor Delivery Data' option. Data entered by admin (truck no, driver contact, order info) is reflected in the Distributor panel in real time.",
+      "reqIds": [],
+      "status": "pending"
+    },
+    {
+      "id": "AR-26",
+      "summary": "Fix 'Add Store' map issue — map is broken or not functioning correctly when adding a store.",
+      "reqIds": [],
+      "status": "pending"
+    },
+    {
+      "id": "AR-27",
+      "summary": "Professional corporate login page redesign: remove demo credentials display, add Distributor login option alongside existing roles. Login credentials: shajan@vitalist.com / India@123. Admin generates IDs for distributor/staff/delivery users.",
+      "reqIds": [],
       "status": "pending"
     }
   ],

@@ -12,7 +12,9 @@ import Principal "mo:core/Principal";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
 import Iter "mo:core/Iter";
+import Migration "migration";
 
+(with migration = Migration.run)
 actor {
   type UserRole = AccessControl.UserRole;
 
@@ -89,6 +91,25 @@ actor {
   };
 
   let orders = Map.empty<Text, OrderRecord>();
+
+  public type DistributorDelivery = {
+    deliveryId : Text;
+    orderId : Text;
+    truckNumber : Text;
+    driverName : Text;
+    driverContact : Text;
+    distributor : Principal;
+    estimatedDeliveryTime : Time.Time;
+    notes : Text;
+  };
+
+  module DistributorDelivery {
+    public func compare(delivery1 : DistributorDelivery, delivery2 : DistributorDelivery) : Order.Order {
+      Text.compare(delivery1.deliveryId, delivery2.deliveryId);
+    };
+  };
+
+  let distributorDeliveries = Map.empty<Text, DistributorDelivery>();
 
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
@@ -259,5 +280,88 @@ actor {
         users.remove(email);
       };
     };
+  };
+
+  // Distributor Delivery Data Management
+
+  public shared ({ caller }) func createDistributorDelivery(delivery : DistributorDelivery) : async () {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can create distributor deliveries");
+    };
+    if (distributorDeliveries.containsKey(delivery.deliveryId)) {
+      Runtime.trap("Delivery ID already exists");
+    };
+    distributorDeliveries.add(delivery.deliveryId, delivery);
+  };
+
+  public shared ({ caller }) func updateDistributorDelivery(deliveryId : Text, updatedDelivery : DistributorDelivery) : async () {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can update distributor deliveries");
+    };
+    switch (distributorDeliveries.get(deliveryId)) {
+      case (null) { Runtime.trap("Distributor delivery does not exist") };
+      case (?_) {
+        distributorDeliveries.add(deliveryId, updatedDelivery);
+      };
+    };
+  };
+
+  public shared ({ caller }) func deleteDistributorDelivery(deliveryId : Text) : async () {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can delete distributor deliveries");
+    };
+    switch (distributorDeliveries.get(deliveryId)) {
+      case (null) { Runtime.trap("Distributor delivery does not exist") };
+      case (?_) {
+        distributorDeliveries.remove(deliveryId);
+      };
+    };
+  };
+
+  // Admin: list all distributor delivery records
+  public query ({ caller }) func getAllDistributorDeliveries() : async [DistributorDelivery] {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can view all distributor deliveries");
+    };
+    distributorDeliveries.values().toArray().sort();
+  };
+
+  // Distributor role (or admin): filter deliveries by distributor principal
+  public query ({ caller }) func getDistributorDeliveriesByUser(distributor : Principal) : async [DistributorDelivery] {
+    // Only the distributor themselves or an admin may query this
+    if (caller != distributor and not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Can only view your own deliveries");
+    };
+    // Require at least authenticated user (not anonymous guest) unless admin
+    if (not AccessControl.isAdmin(accessControlState, caller) and not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only authenticated users can view deliveries");
+    };
+    let filteredList = List.empty<DistributorDelivery>();
+    for (delivery in distributorDeliveries.values()) {
+      if (delivery.distributor == distributor) {
+        filteredList.add(delivery);
+      };
+    };
+    filteredList.toArray();
+  };
+
+  // Fetch a single delivery: only the assigned distributor or an admin may view it
+  public query ({ caller }) func getDistributorDelivery(deliveryId : Text) : async ?DistributorDelivery {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      // Non-admin: must be the assigned distributor for this delivery
+      switch (distributorDeliveries.get(deliveryId)) {
+        case (null) {
+          // Delivery not found; return null without leaking existence to unauthorized callers
+          Runtime.trap("Unauthorized: Only admins or the assigned distributor can view this delivery");
+        };
+        case (?delivery) {
+          if (caller != delivery.distributor) {
+            Runtime.trap("Unauthorized: Only admins or the assigned distributor can view this delivery");
+          };
+          return ?delivery;
+        };
+      };
+    };
+    distributorDeliveries.get(deliveryId);
   };
 };

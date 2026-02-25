@@ -2,13 +2,13 @@
   "kind": "feature_evidence_report",
   "features": [
     {
-      "featureId": "feature-implement-a-role-based-authentication-system-with-three-roles-admin-staff-and-delivery-store-users-in-the-backend-with-email-hashed-password-and-role-pre-seed-three-demo-accounts-admin-vitalist-com-india-123-admin-staff-vitalist-com-india-123-staff-delivery-vitalist-com-india-123-delivery-on-login-return-a-session-token-and-role-enforce-role-based-route-guards-on-the-frontend-so-each-role-only-accesses-permitted-pages-admin-can-add-edit-and-delete-user-accounts",
-      "featureTitle": "Implement a role-based authentication system with three roles: Admin, Staff, and Delivery. Store users in the backend with email, hashed password, and role. Pre-seed three demo accounts: admin@vitalist.com / India@123 (Admin), staff@vitalist.com / India@123 (Staff), delivery@vitalist.com / India@123 (Delivery). On login, return a session token and role. Enforce role-based route guards on the frontend so each role only accesses permitted pages. Admin can add, edit, and delete user accounts.",
+      "featureId": "feature-add-a-distributor-delivery-data-management-section-in-the-admin-panel-admin-can-create-edit-and-delete-distributor-delivery-records-each-record-stores-order-id-linked-to-an-existing-order-truck-number-driver-name-driver-contact-number-distributor-linked-user-with-distributor-role-estimated-delivery-date-time-and-any-additional-notes-the-backend-must-persist-these-records-and-expose-query-functions-to-list-all-records-admin-and-filter-by-distributor-user-distributor-role",
+      "featureTitle": "Add a 'Distributor Delivery Data' management section in the Admin panel. Admin can create, edit, and delete distributor delivery records. Each record stores: Order ID (linked to an existing order), Truck Number, Driver Name, Driver Contact Number, Distributor (linked user with 'distributor' role), Estimated Delivery Date/Time, and any additional Notes. The backend must persist these records and expose query functions to list all records (admin) and filter by distributor user (distributor role).",
       "files": [
         "frontend/src/App.tsx",
-        "frontend/src/contexts/AuthContext.tsx",
-        "frontend/src/pages/LoginPage.tsx",
-        "frontend/src/pages/admin/UserManagementPage.tsx"
+        "frontend/src/components/layout/AppSidebar.tsx",
+        "frontend/src/hooks/useQueries.ts",
+        "frontend/src/pages/admin/DistributorDeliveryManagementPage.tsx"
       ],
       "components": [
         "authorization@4.0.0",
@@ -21,13 +21,37 @@
         "github-export-icp-cli@1.0.0"
       ],
       "testIds": [
-        "REQ-1"
+        "REQ-16"
       ],
       "confidence": "high"
     },
     {
-      "featureId": "feature-implement-a-store-management-module-each-store-record-stores-store-name-owner-name-mobile-number-full-address-landmark-latitude-longitude-and-creation-timestamp-the-add-store-form-includes-a-use-current-location-button-that-auto-fills-latitude-and-longitude-using-the-browser-geolocation-api-plus-a-live-map-preview-using-an-embedded-map-or-coordinate-display-with-a-manual-pin-coordinate-adjustment-option-admin-can-add-edit-and-delete-stores-stores-are-listed-in-a-searchable-table",
-      "featureTitle": "Implement a Store Management module. Each store record stores: Store Name, Owner Name, Mobile Number, Full Address, Landmark, Latitude, Longitude, and Creation Timestamp. The Add Store form includes a 'Use Current Location' button that auto-fills Latitude and Longitude using the browser Geolocation API, plus a live map preview (using an embedded map or coordinate display) with a manual pin/coordinate adjustment option. Admin can add, edit, and delete stores. Stores are listed in a searchable table.",
+      "featureId": "feature-create-a-distributor-portal-panel-accessible-only-to-users-with-the-distributor-role-that-displays-all-distributor-delivery-records-assigned-to-the-logged-in-distributor-each-card-row-shows-order-id-linked-store-name-truck-number-driver-name-driver-contact-number-estimated-delivery-date-time-and-current-order-status-the-distributor-can-mark-an-order-as-truck-arrived-once-they-have-received-the-delivery-at-their-location-the-panel-must-be-mobile-responsive",
+      "featureTitle": "Create a Distributor portal/panel (accessible only to users with the 'distributor' role) that displays all distributor delivery records assigned to the logged-in distributor. Each card/row shows: Order ID, linked Store Name, Truck Number, Driver Name, Driver Contact Number, Estimated Delivery Date/Time, and current Order Status. The distributor can mark an order as 'Truck Arrived' once they have received the delivery at their location. The panel must be mobile-responsive.",
+      "files": [
+        "frontend/src/App.tsx",
+        "frontend/src/components/layout/AppSidebar.tsx",
+        "frontend/src/contexts/AuthContext.tsx",
+        "frontend/src/pages/distributor/DistributorDashboard.tsx"
+      ],
+      "components": [
+        "authorization@4.0.0",
+        "qr-code@1.0.0",
+        "camera@1.0.0",
+        "core-infrastructure@1.0.2",
+        "shadcn-ui@1.0.0",
+        "build-template-react@1.0.0",
+        "initial-app@1.0.0",
+        "github-export-icp-cli@1.0.0"
+      ],
+      "testIds": [
+        "REQ-17"
+      ],
+      "confidence": "high"
+    },
+    {
+      "featureId": "feature-fix-the-add-store-and-edit-store-map-functionality-in-storemanagementpage-tsx-the-map-preview-and-coordinate-display-must-correctly-render-using-the-browser-geolocation-api-for-use-current-location-and-the-manual-coordinate-input-fields-latitude-longitude-must-be-editable-and-kept-in-sync-with-the-map-display-remove-any-dependency-on-external-map-tile-providers-that-may-be-blocked-or-broken-use-an-openstreetmap-iframe-embed-or-a-plain-coordinate-display-with-a-leaflet-static-map-fallback-so-the-map-always-renders-without-errors",
+      "featureTitle": "Fix the 'Add Store' and 'Edit Store' map functionality in StoreManagementPage.tsx. The map preview and coordinate display must correctly render using the browser Geolocation API for 'Use Current Location', and the manual coordinate input fields (Latitude, Longitude) must be editable and kept in sync with the map display. Remove any dependency on external map tile providers that may be blocked or broken; use an OpenStreetMap iframe embed or a plain coordinate display with a Leaflet/static map fallback so the map always renders without errors.",
       "files": [
         "frontend/src/pages/admin/StoreManagementPage.tsx"
       ],
@@ -42,159 +66,7 @@
         "github-export-icp-cli@1.0.0"
       ],
       "testIds": [
-        "REQ-2"
-      ],
-      "confidence": "high"
-    },
-    {
-      "featureId": "feature-implement-the-order-creation-flow-for-staff-the-form-includes-select-store-dropdown-from-store-list-quantity-rate-and-notes-on-submission-the-backend-auto-generates-a-unique-order-id-in-the-format-vw-yyyy-xxxx-e-g-vw-2026-0001-using-the-current-year-and-an-auto-incrementing-counter-the-backend-sets-the-order-status-to-pending-approval-stores-the-creation-timestamp-and-creates-a-draft-invoice-record-order-ids-must-be-unique-with-no-duplicates-and-cannot-be-manually-set",
-      "featureTitle": "Implement the Order Creation flow for Staff. The form includes: Select Store (dropdown from store list), Quantity, Rate, and Notes. On submission, the backend auto-generates a unique Order ID in the format VW-YYYY-XXXX (e.g., VW-2026-0001) using the current year and an auto-incrementing counter. The backend sets the order status to 'Pending Approval', stores the creation timestamp, and creates a draft invoice record. Order IDs must be unique with no duplicates and cannot be manually set.",
-      "files": [
-        "frontend/src/pages/staff/OrderCreationPage.tsx"
-      ],
-      "components": [
-        "authorization@4.0.0",
-        "qr-code@1.0.0",
-        "camera@1.0.0",
-        "core-infrastructure@1.0.2",
-        "shadcn-ui@1.0.0",
-        "build-template-react@1.0.0",
-        "initial-app@1.0.0",
-        "github-export-icp-cli@1.0.0"
-      ],
-      "testIds": [
-        "REQ-3"
-      ],
-      "confidence": "high"
-    },
-    {
-      "featureId": "feature-implement-the-admin-order-approval-flow-admin-views-all-orders-with-pending-approval-status-and-can-approve-or-cancel-them-on-approval-the-status-changes-to-approved-and-a-qr-code-is-generated-containing-the-encrypted-order-id-base64-or-simple-encoding-of-the-order-id-string-the-qr-code-is-stored-linked-to-the-order-one-qr-per-order-qr-cannot-be-regenerated-once-created-without-admin-explicitly-triggering-regeneration-which-requires-cancelling-the-existing-qr-cancelled-orders-are-marked-as-cancelled-and-locked",
-      "featureTitle": "Implement the Admin Order Approval flow. Admin views all orders with 'Pending Approval' status and can approve or cancel them. On approval, the status changes to 'Approved' and a QR code is generated containing the encrypted Order ID (base64 or simple encoding of the Order ID string). The QR code is stored linked to the order. One QR per order; QR cannot be regenerated once created without admin explicitly triggering regeneration (which requires cancelling the existing QR). Cancelled orders are marked as 'Cancelled' and locked.",
-      "files": [
-        "frontend/src/components/qr/QRCodeDisplay.tsx"
-      ],
-      "components": [
-        "authorization@4.0.0",
-        "qr-code@1.0.0",
-        "camera@1.0.0",
-        "core-infrastructure@1.0.2",
-        "shadcn-ui@1.0.0",
-        "build-template-react@1.0.0",
-        "initial-app@1.0.0",
-        "github-export-icp-cli@1.0.0"
-      ],
-      "testIds": [
-        "REQ-4"
-      ],
-      "confidence": "high"
-    },
-    {
-      "featureId": "feature-implement-camera-based-qr-scanning-using-the-device-camera-via-jsqr-or-a-react-qr-scanner-library-when-a-user-taps-clicks-scan-qr-the-camera-opens-in-a-modal-overlay-and-scans-in-real-time-without-manual-entry-on-successful-scan-the-encoded-order-id-is-extracted-the-order-is-fetched-from-the-backend-the-current-stage-transition-is-validated-and-the-status-is-updated-no-manual-qr-code-text-entry-is-permitted-in-the-scanning-flow",
-      "featureTitle": "Implement camera-based QR scanning using the device camera (via jsQR or a React QR scanner library). When a user taps/clicks 'Scan QR', the camera opens in a modal/overlay and scans in real-time without manual entry. On successful scan, the encoded Order ID is extracted, the order is fetched from the backend, the current stage transition is validated, and the status is updated. No manual QR code text entry is permitted in the scanning flow.",
-      "files": [
-        "frontend/src/components/qr/QRScanModal.tsx"
-      ],
-      "components": [
-        "authorization@4.0.0",
-        "qr-code@1.0.0",
-        "camera@1.0.0",
-        "core-infrastructure@1.0.2",
-        "shadcn-ui@1.0.0",
-        "build-template-react@1.0.0",
-        "initial-app@1.0.0",
-        "github-export-icp-cli@1.0.0"
-      ],
-      "testIds": [
-        "REQ-6"
-      ],
-      "confidence": "high"
-    },
-    {
-      "featureId": "feature-implement-the-mobile-optimized-delivery-panel-display-a-list-of-orders-assigned-to-the-logged-in-delivery-user-status-dispatched-or-out-for-delivery-each-order-card-shows-store-name-owner-contact-number-estimated-distance-to-store-calculated-from-stored-gps-coordinates-and-current-device-location-an-open-in-google-maps-button-deep-link-with-store-latitude-longitude-and-a-large-scan-qr-button-when-delivery-is-started-stage-3-scan-initiate-a-delivery-timer-the-panel-must-be-fully-responsive-and-optimized-for-mobile-screens",
-      "featureTitle": "Implement the mobile-optimized Delivery Panel. Display a list of orders assigned to the logged-in delivery user (status: Dispatched or Out for Delivery). Each order card shows: Store Name, Owner Contact Number, estimated distance to store (calculated from stored GPS coordinates and current device location), an 'Open in Google Maps' button (deep link with store latitude/longitude), and a large 'Scan QR' button. When delivery is started (Stage 3 scan), initiate a delivery timer. The panel must be fully responsive and optimized for mobile screens.",
-      "files": [
-        "frontend/src/pages/delivery/DeliveryDashboard.tsx",
-        "frontend/src/utils/geoUtils.ts"
-      ],
-      "components": [
-        "authorization@4.0.0",
-        "qr-code@1.0.0",
-        "camera@1.0.0",
-        "core-infrastructure@1.0.2",
-        "shadcn-ui@1.0.0",
-        "build-template-react@1.0.0",
-        "initial-app@1.0.0",
-        "github-export-icp-cli@1.0.0"
-      ],
-      "testIds": [
-        "REQ-8"
-      ],
-      "confidence": "high"
-    },
-    {
-      "featureId": "feature-implement-the-advanced-order-management-panel-for-admin-features-view-all-orders-in-a-paginated-scrollable-table-filter-by-date-range-from-to-in-dd-mm-yyyy-format-by-store-and-by-status-search-by-order-id-view-full-order-details-in-a-modal-drawer-download-invoice-pdf-monitor-delivery-progress-per-order-the-backend-must-support-query-parameters-for-date-range-filtering-store-filtering-status-filtering-and-order-id-search",
-      "featureTitle": "Implement the Advanced Order Management Panel for Admin. Features: view all orders in a paginated/scrollable table; filter by date range (From/To in DD-MM-YYYY format), by store, and by status; search by Order ID; view full order details in a modal/drawer; download invoice PDF; monitor delivery progress per order. The backend must support query parameters for date-range filtering, store filtering, status filtering, and Order ID search.",
-      "files": [
-        "frontend/src/pages/admin/OrderManagementPage.tsx"
-      ],
-      "components": [
-        "authorization@4.0.0",
-        "qr-code@1.0.0",
-        "camera@1.0.0",
-        "core-infrastructure@1.0.2",
-        "shadcn-ui@1.0.0",
-        "build-template-react@1.0.0",
-        "initial-app@1.0.0",
-        "github-export-icp-cli@1.0.0"
-      ],
-      "testIds": [
-        "REQ-9"
-      ],
-      "confidence": "high"
-    },
-    {
-      "featureId": "feature-implement-the-professional-saas-ui-shell-include-a-fixed-left-sidebar-with-navigation-items-dashboard-stores-orders-invoices-qr-management-reports-settings-the-dashboard-shows-summary-cards-for-total-orders-today-pending-ready-out-for-delivery-and-delivered-the-layout-must-be-fully-responsive-with-a-collapsible-hamburger-sidebar-on-mobile-apply-a-water-blue-corporate-theme-with-soft-shadows-smooth-transitions-and-clean-typography-throughout-all-pages",
-      "featureTitle": "Implement the professional SaaS UI shell. Include a fixed left sidebar with navigation items: Dashboard, Stores, Orders, Invoices, QR Management, Reports, Settings. The Dashboard shows summary cards for: Total Orders Today, Pending, Ready, Out for Delivery, and Delivered. The layout must be fully responsive with a collapsible/hamburger sidebar on mobile. Apply a water-blue corporate theme with soft shadows, smooth transitions, and clean typography throughout all pages.",
-      "files": [
-        "frontend/src/App.tsx",
-        "frontend/src/components/dashboard/StatCard.tsx",
-        "frontend/src/components/layout/Layout.tsx",
-        "frontend/src/pages/Dashboard.tsx"
-      ],
-      "components": [
-        "authorization@4.0.0",
-        "qr-code@1.0.0",
-        "camera@1.0.0",
-        "core-infrastructure@1.0.2",
-        "shadcn-ui@1.0.0",
-        "build-template-react@1.0.0",
-        "initial-app@1.0.0",
-        "github-export-icp-cli@1.0.0"
-      ],
-      "testIds": [
-        "REQ-10"
-      ],
-      "confidence": "high"
-    },
-    {
-      "featureId": "feature-apply-a-cohesive-visual-theme-across-the-entire-application-water-blue-primary-palette-deep-ocean-blues-and-clear-aqua-accents-clean-white-backgrounds-subtle-soft-shadow-cards-bold-sans-serif-typography-smooth-hover-and-transition-animations-and-a-professional-distribution-saas-aesthetic-the-vitalist-water-brand-name-and-logo-wordmark-should-appear-in-the-sidebar-header-and-on-invoices",
-      "featureTitle": "Apply a cohesive visual theme across the entire application: water-blue primary palette (deep ocean blues and clear aqua accents), clean white backgrounds, subtle soft-shadow cards, bold sans-serif typography, smooth hover and transition animations, and a professional distribution SaaS aesthetic. The Vitalist Water brand name and logo/wordmark should appear in the sidebar header and on invoices.",
-      "files": [
-        "frontend/src/index.css",
-        "frontend/tailwind.config.js"
-      ],
-      "components": [
-        "authorization@4.0.0",
-        "qr-code@1.0.0",
-        "camera@1.0.0",
-        "core-infrastructure@1.0.2",
-        "shadcn-ui@1.0.0",
-        "build-template-react@1.0.0",
-        "initial-app@1.0.0",
-        "github-export-icp-cli@1.0.0"
-      ],
-      "testIds": [
-        "REQ-12"
+        "REQ-18"
       ],
       "confidence": "high"
     }

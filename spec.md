@@ -1,68 +1,14 @@
 # Specification
 
 ## Summary
-**Goal:** Build Vitalist Water, a full-stack order and delivery management system with role-based access, GPS-enabled store management, a 4-stage QR-scanned workflow, automated invoicing, and a professional water-blue SaaS UI.
+**Goal:** Add a Distributor Delivery Data management system (Admin creates records, Distributors view their assignments and mark truck arrival), and fix the broken map functionality in the Add/Edit Store dialog.
 
 **Planned changes:**
+- Add a "Distributor Delivery Data" section in the Admin panel with a form to create, edit, and delete delivery records (fields: Order ID, Truck Number, Driver Name, Driver Contact Number, Distributor, Estimated Delivery Date/Time, Notes).
+- Store distributor delivery records in a stable backend data structure with role-based access control; expose queries for all records (admin) and filtered by distributor user ID (distributor role).
+- Add a Distributor Dashboard page accessible only to users with the "distributor" role, displaying their assigned delivery records as cards/rows with Order ID, Store Name, Truck Number, Driver Name, Driver Contact, Estimated Delivery Date/Time, and Order Status.
+- Add a "Mark Truck Arrived" button on each distributor delivery card that updates the record status server-side; button is disabled after already marked.
+- Restrict Distributor Dashboard navigation so distributor-role users only see the Distributor Dashboard nav item in the sidebar.
+- Fix the Add Store / Edit Store map in StoreManagementPage.tsx: replace broken map tile dependency with an OpenStreetMap iframe embed or Leaflet/static map fallback; ensure "Use Current Location" populates latitude/longitude fields and updates the map preview; ensure manual lat/lng edits sync with the map in real time.
 
-### Authentication & Users
-- Role-based login (Admin, Staff, Delivery) with session tokens and route guards
-- Pre-seeded demo accounts: admin@vitalist.com, staff@vitalist.com, delivery@vitalist.com (all India@123)
-- Admin can create, edit, and delete user accounts
-
-### Store Management
-- Store records: Name, Owner Name, Mobile, Address, Landmark, Latitude, Longitude, Timestamp
-- Add/Edit form with "Use Current Location" (browser Geolocation API), live coordinate preview, and manual coordinate adjustment
-- Searchable store list; Admin can edit and delete stores
-
-### Order Creation (Staff)
-- Order form: Select Store, Quantity, Rate, Notes
-- System auto-generates Order ID in VW-YYYY-XXXX format (auto-incrementing, unique, not manually editable)
-- Order saved with status "Pending Approval" and a draft invoice record
-
-### Admin Order Approval
-- Admin views "Pending Approval" orders and can approve or cancel them
-- On approval: status → "Approved", QR code generated (encodes Order ID in base64) and stored (one QR per order)
-- Cancelled orders locked with status "Cancelled"
-
-### 4-Stage QR Workflow
-- Stage 1 (Admin Scan): Approved → Ready; timestamp saved; duplicate scans rejected
-- Stage 2 (Staff Scan): Ready → Dispatched; timestamp logged
-- Stage 3 (Delivery Scan – Start): Dispatched → Out for Delivery; GPS + timestamp required
-- Stage 4 (Delivery Scan – Complete): Out for Delivery → Delivered; GPS + timestamp required; order permanently locked
-- All stage transitions validated server-side; out-of-sequence or re-scans rejected
-
-### Camera-Based QR Scanning
-- "Scan QR" button opens a real-time camera overlay (jsQR or React QR scanner library)
-- Decoded Order ID triggers backend stage transition; no manual text entry allowed
-
-### Automated Invoice System
-- Draft invoice created on order creation; includes branding, Order ID, Invoice Number, store details, Quantity, Rate, Total, Date/Time
-- QR code added to invoice only after admin approval
-- Admin can download/print invoice as PDF (jsPDF or html2canvas)
-- Invoice reflects "Delivered" status upon completion
-
-### Delivery Panel (Mobile-Optimized)
-- Shows assigned orders in Dispatched or Out for Delivery status
-- Each card: Store Name, Owner Contact, estimated distance (device GPS → store GPS), "Open in Google Maps" deep-link button, "Scan QR" button
-- Fully responsive, mobile-first layout
-
-### Admin Order Management Panel
-- Paginated/scrollable table of all orders
-- Filters: date range (DD-MM-YYYY), store, status; search by Order ID
-- Full order details in modal/drawer; invoice PDF download per order; delivery progress visible
-
-### Dashboard & UI Shell
-- Fixed left sidebar: Dashboard, Stores, Orders, Invoices, QR Management, Reports, Settings
-- Dashboard summary cards: Total Orders Today, Pending, Ready, Out for Delivery, Delivered
-- Collapsible/hamburger sidebar on mobile
-- Water-blue corporate theme (deep ocean blues, aqua accents), soft-shadow cards, smooth transitions, bold sans-serif typography
-- Vitalist Water brand name and logo in sidebar header and invoices
-
-### Backend Validation
-- Enforce all stage-transition sequences server-side
-- Reject QR generation before approval, duplicate Order IDs, duplicate scans, out-of-sequence transitions
-- Require GPS for Stage 3 & 4; lock delivered orders from any further changes
-- Store all stage timestamps on the order record
-
-**User-visible outcome:** Admin, Staff, and Delivery users each have a dedicated, role-gated experience. Staff create orders, Admin approves them and generates QR codes, warehouse and delivery staff scan QR codes at each stage to advance the order through a 4-step workflow, and Admin can view/filter all orders, download invoices, and monitor delivery progress — all within a professional, mobile-responsive water-blue SaaS interface.
+**User-visible outcome:** Admins can manage distributor delivery assignments from the Admin panel; distributors can log in to their dedicated dashboard to view their deliveries and mark when a truck has arrived. The Add/Edit Store map works correctly in all modern browsers without errors.

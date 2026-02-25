@@ -1,164 +1,56 @@
 {
   "kind": "spec_vs_diff_report",
   "version": "1.0",
-  "generatedAt": "2026-02-25T05:40:09.013Z",
-  "summary": "The diff implements a substantial portion of the requested Vitalist Water Order & Delivery Management System. Most frontend UI, authentication, store management, order management, QR management, and backend actor structures are present. However, several specific requirements have gaps, and a few hallucinated features are present.",
+  "generatedAt": "2026-02-25T06:42:02.372Z",
+  "summary": "The diff implements most of REQ-16, REQ-17, and REQ-18. Backend DistributorDelivery data structure is added, admin CRUD page is created, distributor dashboard is created, sidebar is updated, and the store map is fixed using an OpenStreetMap iframe. However, several specific acceptance criteria have gaps: the 'Mark Truck Arrived' action lacks confirmed server-side validation ensuring only the assigned distributor can trigger it; the distributor filtering in the admin form uses incorrect role logic ('guest' instead of 'distributor'); and full backend access control enforcement for distributor delivery CRUD is not confirmed in the truncated diff.",
   "missing_requirements": [
     {
-      "id": "REQ-11",
-      "requirement": "Backend must enforce all validation rules in Motoko: QR generation only after approval, duplicate Order ID rejection, out-of-sequence stage transitions rejected, GPS required for Stage 3 and Stage 4, delivered orders permanently locked — all in single backend/main.mo actor file",
-      "reason": "The backend/main.mo is truncated and shows only basic data structures. There is no evidence of stage transition enforcement, GPS coordinate validation, duplicate QR scan rejection, or permanent lock logic. Stage transitions appear handled frontend-side via updateOrder mutations rather than enforced server-side.",
-      "evidence": [
-        "backend/main.mo",
-        "frontend/src/pages/admin/OrderManagementPage.tsx",
-        "frontend/src/hooks/useQueries.ts"
-      ]
-    },
-    {
-      "id": "REQ-3",
-      "requirement": "Order ID auto-generated in VW-YYYY-XXXX format by the backend with auto-incrementing counter; Order IDs are unique and cannot be manually set",
-      "reason": "The backend/main.mo is truncated and shows OrderRecord with orderId as Text but no evidence of the VW-YYYY-XXXX generation logic or auto-increment counter in the backend. The frontend useCreateOrder mutation passes an OrderRecord which may include a client-side orderId.",
-      "evidence": [
-        "backend/main.mo",
-        "frontend/src/hooks/useQueries.ts"
-      ]
-    },
-    {
-      "id": "REQ-7",
-      "requirement": "Automated Invoice System: draft invoice created on order creation, includes branding, Invoice Number, store details, QR code only after approval, PDF download/print capability",
-      "reason": "No InvoicePage or invoice component is visible in the diff. The 'invoices' route in App.tsx renders OrderManagementPage instead of a dedicated invoice page. No invoice data model, invoice number generation, or PDF download/print functionality is present in the shown files.",
-      "evidence": [
-        "frontend/src/App.tsx",
-        "frontend/src/pages/admin/OrderManagementPage.tsx"
-      ]
-    },
-    {
-      "id": "REQ-11",
-      "requirement": "All stage transition timestamps must be stored in the order record",
-      "reason": "The OrderRecord type in backend/main.mo shows only a single 'timestamp' field. No per-stage timestamp fields are visible in the backend data model.",
+      "id": "REQ-16",
+      "requirement": "Backend enforces that only admins can create/update/delete distributor delivery records.",
+      "reason": "The diff shows backend/main.mo is modified and the DistributorDelivery type is added, but the truncated content does not confirm access control checks (admin-only) are applied to create/update/delete distributor delivery endpoints.",
       "evidence": [
         "backend/main.mo"
       ]
     },
     {
-      "id": "REQ-11",
-      "requirement": "GPS coordinates mandatory for Stage 3 and Stage 4 scan submissions; backend rejects requests without them",
-      "reason": "No GPS capture or validation logic is visible in ScanPage or QRScanModal for stage-specific GPS requirements. The backend OrderRecord shown does not include GPS fields for stage 3 and 4 scans.",
+      "id": "REQ-17",
+      "requirement": "The 'Mark Truck Arrived' action must be validated server-side to ensure only the assigned distributor can trigger it.",
+      "reason": "The DistributorDashboard calls useUpdateDistributorDelivery, but there is no evidence in the diff that the backend enforces that only the assigned distributor principal can mark truck arrived. The build request constraints explicitly state this must be server-side validated.",
       "evidence": [
-        "frontend/src/components/qr/QRScanModal.tsx",
+        "frontend/src/pages/distributor/DistributorDashboard.tsx",
         "backend/main.mo"
       ]
     },
     {
-      "id": "REQ-8",
-      "requirement": "Delivery Panel shows orders assigned to logged-in delivery user; each card shows estimated distance computed from device geolocation to store GPS coordinates; delivery timer initiated on Stage 3 scan",
-      "reason": "DeliveryDashboard.tsx is referenced in App.tsx but not included in the diff. Distance calculation and delivery timer logic cannot be verified.",
+      "id": "REQ-16",
+      "requirement": "Distributor dropdown in admin form must show only users with the 'distributor' role.",
+      "reason": "In DistributorDeliveryManagementPage.tsx, the filter uses u.role === 'guest' || (u as any).role === 'distributor', which incorrectly includes 'guest' role users instead of filtering strictly for 'distributor' role.",
       "evidence": [
-        "frontend/src/App.tsx"
-      ]
-    },
-    {
-      "id": "REQ-2",
-      "requirement": "Live map preview updates when coordinates change; manual pin/coordinate adjustment option in Add Store form",
-      "reason": "StoreManagementPage shows GPS auto-fill and manual lat/lng input fields, but no live map preview component or embedded map widget is visible in the truncated file.",
-      "evidence": [
-        "frontend/src/pages/admin/StoreManagementPage.tsx"
-      ]
-    },
-    {
-      "id": "REQ-4",
-      "requirement": "QR regeneration requires admin to explicitly cancel the existing QR; only one QR per order enforced",
-      "reason": "No explicit QR cancellation/regeneration workflow is shown. The approval flow sets qrData in notes metadata but there is no UI or backend enforcement preventing re-generation without explicit cancellation.",
-      "evidence": [
-        "frontend/src/pages/admin/OrderManagementPage.tsx"
-      ]
-    },
-    {
-      "id": "REQ-9",
-      "requirement": "Backend must support query parameters for date-range filtering, store filtering, status filtering, and Order ID search",
-      "reason": "The backend/main.mo is truncated and shows no filtered query endpoints. Filtering in OrderManagementPage is done entirely client-side in useMemo, not via backend query parameters.",
-      "evidence": [
-        "backend/main.mo",
-        "frontend/src/pages/admin/OrderManagementPage.tsx"
-      ]
-    },
-    {
-      "requirement": "Vitalist Water brand logo image (vitalist-logo.dim_320x80.png) and water droplet icon (vitalist-icon.dim_64x64.png) required as actual image assets",
-      "reason": "No image asset files are shown in the diff. The sidebar uses a Droplets lucide icon instead of the specified brand logo image.",
-      "evidence": [
-        "frontend/src/components/layout/AppSidebar.tsx"
+        "frontend/src/pages/admin/DistributorDeliveryManagementPage.tsx"
       ]
     }
   ],
   "hallucinated_features": [
     {
-      "description": "Full Internet Identity authentication integration via @dfinity/auth-client with useInternetIdentity hook and InternetIdentityProvider wrapping the app",
-      "reason": "The build request explicitly lists Internet Identity authentication as a non-goal. The diff implements a full Internet Identity provider and wraps the app with it in main.tsx.",
+      "description": "A separate backend/migration.mo module file was created to handle data migration for the new distributorDeliveries stable map.",
+      "reason": "The build request does not mention a migration module or file. The constraints only require backend logic to remain in the single actor in backend/main.mo.",
       "evidence": [
-        "frontend/src/hooks/useInternetIdentity.ts",
-        "frontend/src/main.tsx",
-        "frontend/src/hooks/useActor.ts"
-      ]
-    },
-    {
-      "description": "Revenue calculation in ReportsPage computing totalRevenue as quantity multiplied by rate for delivered orders",
-      "reason": "The build request explicitly prohibits financial, profit, or revenue reporting modules. ReportsPage computes and likely displays totalRevenue.",
-      "evidence": [
-        "frontend/src/pages/admin/ReportsPage.tsx"
-      ]
-    },
-    {
-      "description": "AccessControl mixin system with secret admin token parameter (caffeineAdminToken) for actor initialization",
-      "reason": "The build request does not mention any admin token secret parameter or access control mixin architecture. This appears to be template scaffolding not requested.",
-      "evidence": [
-        "frontend/src/hooks/useActor.ts",
-        "backend/main.mo"
-      ]
-    },
-    {
-      "description": "UserProfile system linked to ICP Principal separate from the email/role User system",
-      "reason": "The build request specifies a simple email plus password plus role user system. A separate UserProfile keyed by Principal is not requested and is tied to the Internet Identity system which is explicitly a non-goal.",
-      "evidence": [
-        "backend/main.mo"
+        "backend/migration.mo"
       ]
     }
   ],
-  "confidence": 0.62,
+  "confidence": 0.72,
   "changed_files": [
-    "all_files_summary.json",
     "backend/main.mo",
+    "backend/migration.mo",
     "frontend-file-summaries.txt",
-    "frontend/index.css",
-    "frontend/index.html",
     "frontend/src/App.tsx",
-    "frontend/src/components/dashboard/StatCard.tsx",
     "frontend/src/components/layout/AppSidebar.tsx",
-    "frontend/src/components/layout/Layout.tsx",
-    "frontend/src/components/orders/StatusBadge.tsx",
-    "frontend/src/components/qr/QRCodeDisplay.tsx",
-    "frontend/src/components/qr/QRScanModal.tsx",
     "frontend/src/contexts/AuthContext.tsx",
-    "frontend/src/hooks/useActor.ts",
-    "frontend/src/hooks/useInternetIdentity.ts",
     "frontend/src/hooks/useQueries.ts",
-    "frontend/src/index.css",
-    "frontend/src/main.tsx",
-    "frontend/src/pages/Dashboard.tsx",
-    "frontend/src/pages/LoginPage.tsx",
-    "frontend/src/pages/ScanPage.tsx",
-    "frontend/src/pages/SettingsPage.tsx",
-    "frontend/src/pages/admin/OrderManagementPage.tsx",
-    "frontend/src/pages/admin/QRManagementPage.tsx",
-    "frontend/src/pages/admin/ReportsPage.tsx",
+    "frontend/src/pages/admin/DistributorDeliveryManagementPage.tsx",
     "frontend/src/pages/admin/StoreManagementPage.tsx",
-    "frontend/src/pages/admin/UserManagementPage.tsx",
-    "frontend/src/pages/delivery/DeliveryDashboard.tsx",
-    "frontend/src/pages/staff/OrderCreationPage.tsx",
-    "frontend/src/utils/geoUtils.ts",
-    "frontend/src/utils/orderUtils.ts",
-    "frontend/src/utils/qrGenerator.ts",
-    "frontend/src/utils/urlParams.ts",
-    "frontend/tailwind.config.js",
+    "frontend/src/pages/distributor/DistributorDashboard.tsx",
     "project_state.json"
   ]
 }

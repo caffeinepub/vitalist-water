@@ -91,7 +91,7 @@ export default function ScanPage({ role }: ScanPageProps) {
           };
           await updateOrder.mutateAsync({
             orderId,
-            updatedOrder: {
+            order: {
               ...order,
               status: 'Out for Delivery',
               notes: buildNotesWithMeta(userNotes, updatedMeta),
@@ -117,7 +117,7 @@ export default function ScanPage({ role }: ScanPageProps) {
           };
           await updateOrder.mutateAsync({
             orderId,
-            updatedOrder: {
+            order: {
               ...order,
               status: 'Delivered',
               notes: buildNotesWithMeta(userNotes, updatedMeta),
@@ -150,7 +150,7 @@ export default function ScanPage({ role }: ScanPageProps) {
         const updatedMeta = { ...meta, stage1Timestamp: Date.now() };
         await updateOrder.mutateAsync({
           orderId,
-          updatedOrder: {
+          order: {
             ...order,
             status: 'Ready',
             notes: buildNotesWithMeta(userNotes, updatedMeta),
@@ -177,7 +177,7 @@ export default function ScanPage({ role }: ScanPageProps) {
         const updatedMeta = { ...meta, stage2Timestamp: Date.now() };
         await updateOrder.mutateAsync({
           orderId,
-          updatedOrder: {
+          order: {
             ...order,
             status: 'Dispatched',
             notes: buildNotesWithMeta(userNotes, updatedMeta),
@@ -214,7 +214,7 @@ export default function ScanPage({ role }: ScanPageProps) {
 
       {/* Scan button */}
       <div className={`rounded-xl border ${config.borderColor} ${config.bgColor} p-8 flex flex-col items-center gap-4`}>
-        <div className={`w-20 h-20 rounded-2xl bg-white shadow-card flex items-center justify-center`}>
+        <div className="w-20 h-20 rounded-2xl bg-white shadow-card flex items-center justify-center">
           <ScanLine className={`h-10 w-10 ${config.color}`} />
         </div>
         <div className="text-center">

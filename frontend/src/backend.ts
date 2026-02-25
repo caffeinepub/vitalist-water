@@ -89,15 +89,16 @@ export class ExternalBlob {
         return this;
     }
 }
-export interface Store {
-    latitude: number;
-    ownerName: string;
-    mobileNumber: string;
-    longitude: number;
-    address: string;
-    storeName: string;
-    timestamp: bigint;
-    landmark: string;
+export type Time = bigint;
+export interface DistributorDelivery {
+    distributor: Principal;
+    deliveryId: string;
+    estimatedDeliveryTime: Time;
+    orderId: string;
+    driverContact: string;
+    notes: string;
+    truckNumber: string;
+    driverName: string;
 }
 export interface OrderRecord {
     status: string;
@@ -108,15 +109,25 @@ export interface OrderRecord {
     timestamp: bigint;
     quantity: bigint;
 }
-export interface UserProfile {
-    name: string;
-    role: string;
-    email: string;
-}
 export interface User {
     role: UserRole;
     email: string;
     hashedPassword: string;
+}
+export interface Store {
+    latitude: number;
+    ownerName: string;
+    mobileNumber: string;
+    longitude: number;
+    address: string;
+    storeName: string;
+    timestamp: bigint;
+    landmark: string;
+}
+export interface UserProfile {
+    name: string;
+    role: string;
+    email: string;
 }
 export enum UserRole {
     admin = "admin",
@@ -128,24 +139,30 @@ export interface backendInterface {
     addStore(store: Store): Promise<void>;
     addUser(user: User): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    createDistributorDelivery(delivery: DistributorDelivery): Promise<void>;
     createOrder(order: OrderRecord): Promise<void>;
+    deleteDistributorDelivery(deliveryId: string): Promise<void>;
     deleteStore(id: bigint): Promise<void>;
     deleteUser(email: string): Promise<void>;
+    getAllDistributorDeliveries(): Promise<Array<DistributorDelivery>>;
     getAllOrders(): Promise<Array<OrderRecord>>;
     getAllStores(): Promise<Array<Store>>;
     getAllUsers(): Promise<Array<User>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
+    getDistributorDeliveriesByUser(distributor: Principal): Promise<Array<DistributorDelivery>>;
+    getDistributorDelivery(deliveryId: string): Promise<DistributorDelivery | null>;
     getOrder(orderId: string): Promise<OrderRecord | null>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     initializeSystem(): Promise<void>;
     isCallerAdmin(): Promise<boolean>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
+    updateDistributorDelivery(deliveryId: string, updatedDelivery: DistributorDelivery): Promise<void>;
     updateOrder(orderId: string, updatedOrder: OrderRecord): Promise<void>;
     updateStore(id: bigint, store: Store): Promise<void>;
     updateUser(email: string, updatedUser: User): Promise<void>;
 }
-import type { OrderRecord as _OrderRecord, User as _User, UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
+import type { DistributorDelivery as _DistributorDelivery, OrderRecord as _OrderRecord, User as _User, UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
     async _initializeAccessControlWithSecret(arg0: string): Promise<void> {
@@ -204,6 +221,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async createDistributorDelivery(arg0: DistributorDelivery): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createDistributorDelivery(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createDistributorDelivery(arg0);
+            return result;
+        }
+    }
     async createOrder(arg0: OrderRecord): Promise<void> {
         if (this.processError) {
             try {
@@ -215,6 +246,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.createOrder(arg0);
+            return result;
+        }
+    }
+    async deleteDistributorDelivery(arg0: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deleteDistributorDelivery(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deleteDistributorDelivery(arg0);
             return result;
         }
     }
@@ -243,6 +288,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.deleteUser(arg0);
+            return result;
+        }
+    }
+    async getAllDistributorDeliveries(): Promise<Array<DistributorDelivery>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAllDistributorDeliveries();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAllDistributorDeliveries();
             return result;
         }
     }
@@ -316,18 +375,46 @@ export class Backend implements backendInterface {
             return from_candid_UserRole_n8(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getOrder(arg0: string): Promise<OrderRecord | null> {
+    async getDistributorDeliveriesByUser(arg0: Principal): Promise<Array<DistributorDelivery>> {
         if (this.processError) {
             try {
-                const result = await this.actor.getOrder(arg0);
+                const result = await this.actor.getDistributorDeliveriesByUser(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getDistributorDeliveriesByUser(arg0);
+            return result;
+        }
+    }
+    async getDistributorDelivery(arg0: string): Promise<DistributorDelivery | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getDistributorDelivery(arg0);
                 return from_candid_opt_n11(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getOrder(arg0);
+            const result = await this.actor.getDistributorDelivery(arg0);
             return from_candid_opt_n11(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getOrder(arg0: string): Promise<OrderRecord | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getOrder(arg0);
+                return from_candid_opt_n12(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getOrder(arg0);
+            return from_candid_opt_n12(this._uploadFile, this._downloadFile, result);
         }
     }
     async getUserProfile(arg0: Principal): Promise<UserProfile | null> {
@@ -386,6 +473,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async updateDistributorDelivery(arg0: string, arg1: DistributorDelivery): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.updateDistributorDelivery(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.updateDistributorDelivery(arg0, arg1);
+            return result;
+        }
+    }
     async updateOrder(arg0: string, arg1: OrderRecord): Promise<void> {
         if (this.processError) {
             try {
@@ -438,7 +539,10 @@ function from_candid_User_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8A
 function from_candid_opt_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_OrderRecord]): OrderRecord | null {
+function from_candid_opt_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_DistributorDelivery]): DistributorDelivery | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_OrderRecord]): OrderRecord | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_record_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {

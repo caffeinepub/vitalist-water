@@ -10,6 +10,16 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface DistributorDelivery {
+  'distributor' : Principal,
+  'deliveryId' : string,
+  'estimatedDeliveryTime' : Time,
+  'orderId' : string,
+  'driverContact' : string,
+  'notes' : string,
+  'truckNumber' : string,
+  'driverName' : string,
+}
 export interface OrderRecord {
   'status' : string,
   'storeId' : bigint,
@@ -29,6 +39,7 @@ export interface Store {
   'timestamp' : bigint,
   'landmark' : string,
 }
+export type Time = bigint;
 export interface User {
   'role' : UserRole,
   'email' : string,
@@ -47,19 +58,31 @@ export interface _SERVICE {
   'addStore' : ActorMethod<[Store], undefined>,
   'addUser' : ActorMethod<[User], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'createDistributorDelivery' : ActorMethod<[DistributorDelivery], undefined>,
   'createOrder' : ActorMethod<[OrderRecord], undefined>,
+  'deleteDistributorDelivery' : ActorMethod<[string], undefined>,
   'deleteStore' : ActorMethod<[bigint], undefined>,
   'deleteUser' : ActorMethod<[string], undefined>,
+  'getAllDistributorDeliveries' : ActorMethod<[], Array<DistributorDelivery>>,
   'getAllOrders' : ActorMethod<[], Array<OrderRecord>>,
   'getAllStores' : ActorMethod<[], Array<Store>>,
   'getAllUsers' : ActorMethod<[], Array<User>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
+  'getDistributorDeliveriesByUser' : ActorMethod<
+    [Principal],
+    Array<DistributorDelivery>
+  >,
+  'getDistributorDelivery' : ActorMethod<[string], [] | [DistributorDelivery]>,
   'getOrder' : ActorMethod<[string], [] | [OrderRecord]>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'initializeSystem' : ActorMethod<[], undefined>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
+  'updateDistributorDelivery' : ActorMethod<
+    [string, DistributorDelivery],
+    undefined
+  >,
   'updateOrder' : ActorMethod<[string, OrderRecord], undefined>,
   'updateStore' : ActorMethod<[bigint, Store], undefined>,
   'updateUser' : ActorMethod<[string, User], undefined>,
