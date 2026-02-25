@@ -1,0 +1,343 @@
+{
+  "kind": "build_request",
+  "title": "Vitalist Water — Order & Delivery Management System (Full Build)",
+  "projectName": "Vitalist Water",
+  "priority": "high",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "Implement a role-based authentication system with three roles: Admin, Staff, and Delivery. Store users in the backend with email, hashed password, and role. Pre-seed three demo accounts: admin@vitalist.com / India@123 (Admin), staff@vitalist.com / India@123 (Staff), delivery@vitalist.com / India@123 (Delivery). On login, return a session token and role. Enforce role-based route guards on the frontend so each role only accesses permitted pages. Admin can add, edit, and delete user accounts.",
+      "target": "both",
+      "source": {
+        "messageIds": [
+          "msg-2"
+        ],
+        "quotes": [
+          "SYSTEM ROLES (Role-Based Access Control)",
+          "LOGIN CREDENTIALS (Demo Access)",
+          "Admin has authority to add, edit, or delete user accounts"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Login page accepts email and password and authenticates against stored credentials",
+        "Admin, Staff, and Delivery demo accounts are pre-seeded and functional",
+        "Each role is redirected to its respective dashboard after login",
+        "Pages not permitted for a role are inaccessible (redirect to login or error)",
+        "Admin can create, edit, and delete user accounts from the Settings or Users panel"
+      ]
+    },
+    {
+      "id": "REQ-2",
+      "text": "Implement a Store Management module. Each store record stores: Store Name, Owner Name, Mobile Number, Full Address, Landmark, Latitude, Longitude, and Creation Timestamp. The Add Store form includes a 'Use Current Location' button that auto-fills Latitude and Longitude using the browser Geolocation API, plus a live map preview (using an embedded map or coordinate display) with a manual pin/coordinate adjustment option. Admin can add, edit, and delete stores. Stores are listed in a searchable table.",
+      "target": "both",
+      "source": {
+        "messageIds": [
+          "msg-2"
+        ],
+        "quotes": [
+          "STORE MANAGEMENT (GPS-Enabled Smart Mapping)",
+          "Use Current Location button",
+          "Automatic GPS detection",
+          "Auto-filled Latitude & Longitude",
+          "Live map preview",
+          "Manual pin adjustment option"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Admin can add a store with all required fields including GPS coordinates",
+        "'Use Current Location' button auto-fills latitude and longitude via browser geolocation",
+        "Live map preview (coordinate display or embedded map) updates when coordinates change",
+        "Coordinates can be manually adjusted",
+        "Store list is displayed and searchable; Admin can edit and delete stores"
+      ]
+    },
+    {
+      "id": "REQ-3",
+      "text": "Implement the Order Creation flow for Staff. The form includes: Select Store (dropdown from store list), Quantity, Rate, and Notes. On submission, the backend auto-generates a unique Order ID in the format VW-YYYY-XXXX (e.g., VW-2026-0001) using the current year and an auto-incrementing counter. The backend sets the order status to 'Pending Approval', stores the creation timestamp, and creates a draft invoice record. Order IDs must be unique with no duplicates and cannot be manually set.",
+      "target": "both",
+      "source": {
+        "messageIds": [
+          "msg-2"
+        ],
+        "quotes": [
+          "Order Creation (Staff Panel)",
+          "Generates Unique Order ID",
+          "VW-2026-0001",
+          "Sets Status: Pending Approval",
+          "Auto-increment Order ID",
+          "No duplicates",
+          "Order ID cannot be manually edited"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Staff can create an order by selecting a store, entering quantity, rate, and notes",
+        "System generates a unique Order ID in VW-YYYY-XXXX format automatically",
+        "Order is saved with status 'Pending Approval' and a creation timestamp",
+        "A draft invoice record is created alongside the order",
+        "Duplicate Order IDs cannot exist; the counter increments reliably"
+      ]
+    },
+    {
+      "id": "REQ-4",
+      "text": "Implement the Admin Order Approval flow. Admin views all orders with 'Pending Approval' status and can approve or cancel them. On approval, the status changes to 'Approved' and a QR code is generated containing the encrypted Order ID (base64 or simple encoding of the Order ID string). The QR code is stored linked to the order. One QR per order; QR cannot be regenerated once created without admin explicitly triggering regeneration (which requires cancelling the existing QR). Cancelled orders are marked as 'Cancelled' and locked.",
+      "target": "both",
+      "source": {
+        "messageIds": [
+          "msg-2"
+        ],
+        "quotes": [
+          "Approve Orders",
+          "QR is generated only after admin approval",
+          "One QR per order",
+          "Linked permanently to that order",
+          "Cannot be regenerated without admin authority",
+          "Cancel Orders"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Admin can approve a 'Pending Approval' order; status changes to 'Approved'",
+        "QR code is generated and stored upon approval, containing the encoded Order ID",
+        "Only one QR exists per order",
+        "Admin can cancel orders; cancelled orders are locked with status 'Cancelled'",
+        "QR cannot be regenerated automatically; admin must take explicit action"
+      ]
+    },
+    {
+      "id": "REQ-5",
+      "text": "Implement the 4-stage controlled order workflow with QR scanning at each stage. Stage 1 (Admin Scan): Admin scans QR; status changes from 'Approved' to 'Ready'; packing confirmed; timestamp saved; duplicate scan blocked. Stage 2 (Staff Scan): Staff scans QR; status changes from 'Ready' to 'Dispatched'; handover confirmed; timestamp logged. Stage 3 (Delivery Scan – Start): Delivery user scans QR; status changes from 'Dispatched' to 'Out for Delivery'; GPS coordinates captured; delivery timer started; timestamp logged. Stage 4 (Delivery Scan – Complete): Delivery user scans QR again; status changes from 'Out for Delivery' to 'Delivered'; GPS coordinates captured; order permanently locked; no re-scan permitted. Each stage transition is validated server-side to enforce ordering; scanning an already-processed QR at the wrong stage is rejected.",
+      "target": "both",
+      "source": {
+        "messageIds": [
+          "msg-2"
+        ],
+        "quotes": [
+          "4-STAGE CONTROLLED WORKFLOW",
+          "Stage 1 – Admin Scan",
+          "Stage 2 – Staff Scan",
+          "Stage 3 – Delivery Scan (Start)",
+          "Stage 4 – Delivery Scan (Complete)",
+          "Duplicate scan blocked",
+          "Order permanently locked",
+          "No re-scan permitted"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Stage 1: Admin scans QR → status changes Approved → Ready with timestamp; duplicate scans are rejected",
+        "Stage 2: Staff scans QR → status changes Ready → Dispatched with timestamp",
+        "Stage 3: Delivery scans QR → status changes Dispatched → Out for Delivery; GPS and timestamp recorded",
+        "Stage 4: Delivery scans QR → status changes Out for Delivery → Delivered; GPS recorded; order locked",
+        "Scanning out of sequence is rejected by the backend",
+        "Delivered orders cannot be scanned again"
+      ]
+    },
+    {
+      "id": "REQ-6",
+      "text": "Implement camera-based QR scanning using the device camera (via jsQR or a React QR scanner library). When a user taps/clicks 'Scan QR', the camera opens in a modal/overlay and scans in real-time without manual entry. On successful scan, the encoded Order ID is extracted, the order is fetched from the backend, the current stage transition is validated, and the status is updated. No manual QR code text entry is permitted in the scanning flow.",
+      "target": "frontend",
+      "source": {
+        "messageIds": [
+          "msg-2"
+        ],
+        "quotes": [
+          "No manual QR entry allowed",
+          "Mobile camera opens automatically",
+          "Scanner activates instantly",
+          "QR is read in real-time",
+          "Order is fetched automatically"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Clicking 'Scan QR' opens a camera-based scanning overlay/modal",
+        "QR is detected and decoded in real-time from the camera feed",
+        "Order ID is extracted from the QR and a status-update request is sent to the backend",
+        "Success/failure feedback is shown after scan",
+        "No text input field for manual QR entry is present in the scanning UI"
+      ]
+    },
+    {
+      "id": "REQ-7",
+      "text": "Implement the Automated Invoice System. An invoice is created as a draft when an order is placed. The invoice includes: Vitalist Water branding, Order ID, Invoice Number, Store details and address, Quantity, Rate, Total Amount (Quantity × Rate), Date & Time, and the QR code image (only after admin approval). Admin can view the invoice and trigger a print-friendly PDF download using browser print or a library like jsPDF/html2canvas. The invoice updates automatically when the order reaches 'Delivered' status.",
+      "target": "both",
+      "source": {
+        "messageIds": [
+          "msg-2"
+        ],
+        "quotes": [
+          "AUTOMATED INVOICE SYSTEM",
+          "Vitalist Water Logo",
+          "QR Code (after admin approval)",
+          "Admin can: Download PDF, Print, Share",
+          "Invoice automatically updates after delivery completion"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Invoice is created as a draft on order creation and associated with the order",
+        "Invoice displays all required fields including branding, store details, totals, and timestamps",
+        "QR code appears on the invoice only after admin approval",
+        "Admin can download/print the invoice as PDF",
+        "Invoice status and content reflect 'Delivered' completion when order is delivered"
+      ]
+    },
+    {
+      "id": "REQ-8",
+      "text": "Implement the mobile-optimized Delivery Panel. Display a list of orders assigned to the logged-in delivery user (status: Dispatched or Out for Delivery). Each order card shows: Store Name, Owner Contact Number, estimated distance to store (calculated from stored GPS coordinates and current device location), an 'Open in Google Maps' button (deep link with store latitude/longitude), and a large 'Scan QR' button. When delivery is started (Stage 3 scan), initiate a delivery timer. The panel must be fully responsive and optimized for mobile screens.",
+      "target": "frontend",
+      "source": {
+        "messageIds": [
+          "msg-2"
+        ],
+        "quotes": [
+          "DELIVERY PANEL (Mobile Optimized)",
+          "Store Name",
+          "Contact Number",
+          "Distance to Store",
+          "Open in Google Maps button",
+          "Large Scan QR button",
+          "Navigation opens",
+          "Admin dashboard updates in real-time"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Delivery user sees only their assigned orders in Dispatched or Out for Delivery status",
+        "Each order card shows store name, contact, distance, Google Maps link, and Scan QR button",
+        "Google Maps button opens navigation to the store's GPS coordinates in a new tab/app",
+        "Distance is computed from the device's current geolocation to the store's stored coordinates",
+        "Panel is fully responsive and usable on mobile screens"
+      ]
+    },
+    {
+      "id": "REQ-9",
+      "text": "Implement the Advanced Order Management Panel for Admin. Features: view all orders in a paginated/scrollable table; filter by date range (From/To in DD-MM-YYYY format), by store, and by status; search by Order ID; view full order details in a modal/drawer; download invoice PDF; monitor delivery progress per order. The backend must support query parameters for date-range filtering, store filtering, status filtering, and Order ID search.",
+      "target": "both",
+      "source": {
+        "messageIds": [
+          "msg-2"
+        ],
+        "quotes": [
+          "ADVANCED ORDER MANAGEMENT PANEL",
+          "Filter By: Today, Custom Date Range, Store, Status",
+          "Search by Order ID",
+          "View Full Details",
+          "Download Invoice",
+          "Monitor Delivery Progress",
+          "From: 01-02-2026 To: 15-02-2026"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Admin can view all orders in a table with pagination or scroll",
+        "Filters for date range, store, and status are functional and update the order list",
+        "Search by Order ID returns the matching order",
+        "Full order details are accessible from the table row",
+        "Invoice download is available per order from the table",
+        "Delivery progress/status is visible per order"
+      ]
+    },
+    {
+      "id": "REQ-10",
+      "text": "Implement the professional SaaS UI shell. Include a fixed left sidebar with navigation items: Dashboard, Stores, Orders, Invoices, QR Management, Reports, Settings. The Dashboard shows summary cards for: Total Orders Today, Pending, Ready, Out for Delivery, and Delivered. The layout must be fully responsive with a collapsible/hamburger sidebar on mobile. Apply a water-blue corporate theme with soft shadows, smooth transitions, and clean typography throughout all pages.",
+      "target": "frontend",
+      "source": {
+        "messageIds": [
+          "msg-2"
+        ],
+        "quotes": [
+          "PROFESSIONAL UI STRUCTURE",
+          "Sidebar Navigation",
+          "Dashboard Overview",
+          "Clean corporate SaaS layout",
+          "Water-blue theme",
+          "Soft shadows",
+          "Smooth transitions",
+          "Fully responsive"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Sidebar with all listed navigation items is present and functional",
+        "Dashboard displays 5 summary stat cards with live counts from the backend",
+        "Sidebar collapses to a hamburger menu on mobile screens",
+        "Water-blue color palette is consistently applied across all pages",
+        "Smooth CSS transitions are present on hover states, modals, and page navigation",
+        "Layout is usable on both desktop and mobile viewports"
+      ]
+    },
+    {
+      "id": "REQ-11",
+      "text": "Enforce all system validation rules in the backend: orders cannot be approved without being in 'Pending Approval' status; QR codes are never generated before approval; Order IDs are unique and auto-incremented; duplicate QR scans at any stage are rejected; all stage transitions are enforced in sequence; orders are permanently locked after 'Delivered'; all stage timestamps are recorded; GPS coordinates are required for Stage 3 and Stage 4 scans.",
+      "target": "backend",
+      "source": {
+        "messageIds": [
+          "msg-2"
+        ],
+        "quotes": [
+          "SYSTEM VALIDATION GUARANTEES",
+          "No order without approval",
+          "No QR before approval",
+          "No duplicate Order IDs",
+          "No duplicate scanning",
+          "Mandatory GPS capture on delivery",
+          "Automatic order lock after completion",
+          "Complete timestamp logging",
+          "Zero workflow bypass allowed"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Backend rejects QR generation if order is not in 'Approved' status",
+        "Backend rejects duplicate Order IDs",
+        "Backend rejects stage transitions attempted out of sequence",
+        "Backend rejects re-scans on already-completed stages",
+        "Stage 3 and Stage 4 scan endpoints require GPS coordinates; requests without them are rejected",
+        "Delivered orders cannot be modified or re-scanned",
+        "All stage transition timestamps are stored in the order record"
+      ]
+    },
+    {
+      "id": "REQ-12",
+      "text": "Apply a cohesive visual theme across the entire application: water-blue primary palette (deep ocean blues and clear aqua accents), clean white backgrounds, subtle soft-shadow cards, bold sans-serif typography, smooth hover and transition animations, and a professional distribution SaaS aesthetic. The Vitalist Water brand name and logo/wordmark should appear in the sidebar header and on invoices.",
+      "target": "frontend",
+      "source": {
+        "messageIds": [
+          "msg-2"
+        ],
+        "quotes": [
+          "Water-blue theme",
+          "Clean corporate SaaS layout",
+          "Soft shadows",
+          "Smooth transitions",
+          "Vitalist Water Logo"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Water-blue color palette is consistently used for primary actions, sidebar, and accents",
+        "Cards and panels use soft drop shadows",
+        "Typography is clean, readable, and consistent across all pages",
+        "Vitalist Water brand name appears in the sidebar and on invoice templates",
+        "Hover states and modal entrances use smooth CSS transitions"
+      ]
+    }
+  ],
+  "constraints": [
+    "No financial/profit module — do not include revenue, margin, or profit-related features",
+    "QR codes must be generated only after admin approval — never before",
+    "No manual QR code text entry is allowed in the scanning workflow",
+    "Order IDs must be system-generated and auto-incremented; never manually editable",
+    "Delivered orders must be permanently locked with no further status changes",
+    "GPS coordinates are mandatory for Stage 3 and Stage 4 scan submissions",
+    "All Motoko logic must remain in the single backend/main.mo actor file"
+  ],
+  "nonGoals": [
+    "Financial, profit, or revenue reporting module",
+    "Third-party payment processing",
+    "Real-time WebSocket push notifications (dashboard refresh via polling is acceptable)",
+    "External map tile rendering (Google Maps used only via deep-link URL for navigation)",
+    "SMS or email notification integrations",
+    "Multi-company or multi-tenant support",
+    "Internet Identity authentication (demo credential-based login only)"
+  ],
+  "imageRequirements": {
+    "required": [
+      "Vitalist Water brand logo — a clean water droplet icon with bold wordmark 'VITALIST WATER' in deep ocean blue and aqua, suitable for sidebar and invoice header (vitalist-logo.dim_320x80.png)",
+      "Water droplet icon in solid aqua blue for favicon and app icon usage (vitalist-icon.dim_64x64.png)"
+    ],
+    "edits": []
+  }
+}

@@ -1,0 +1,303 @@
+{
+  "kind": "coverage_report",
+  "version": "1.0",
+  "generatedAt": "2026-02-25T05:40:09.016Z",
+  "sources": {
+    "buildRequest": true,
+    "implementationPlan": true
+  },
+  "requirements": {
+    "total": 12,
+    "implemented": 9,
+    "items": [
+      {
+        "id": "REQ-1",
+        "summary": "Implement a role-based authentication system with three roles: Admin, Staff, and Delivery. Store users in the backend with email, hashed password, and role. Pre-seed three demo accounts: admin@vitalist.com / India@123 (Admin), staff@vitalist.com / India@123 (Staff), delivery@vitalist.com / India@123 (Delivery). On login, return a session token and role. Enforce role-based route guards on the frontend so each role only accesses permitted pages. Admin can add, edit, and delete user accounts.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/pages/LoginPage.tsx",
+          "frontend/src/contexts/AuthContext.tsx",
+          "frontend/src/components/auth/RoleGuard.tsx",
+          "frontend/src/pages/admin/UserManagementPage.tsx",
+          "frontend/src/hooks/useAuth.ts",
+          "frontend/src/App.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/pages/LoginPage.tsx",
+          "frontend/src/contexts/AuthContext.tsx",
+          "frontend/src/pages/admin/UserManagementPage.tsx",
+          "frontend/src/App.tsx"
+        ]
+      },
+      {
+        "id": "REQ-10",
+        "summary": "Implement the professional SaaS UI shell. Include a fixed left sidebar with navigation items: Dashboard, Stores, Orders, Invoices, QR Management, Reports, Settings. The Dashboard shows summary cards for: Total Orders Today, Pending, Ready, Out for Delivery, and Delivered. The layout must be fully responsive with a collapsible/hamburger sidebar on mobile. Apply a water-blue corporate theme with soft shadows, smooth transitions, and clean typography throughout all pages.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/components/layout/Sidebar.tsx",
+          "frontend/src/components/layout/Layout.tsx",
+          "frontend/src/pages/Dashboard.tsx",
+          "frontend/src/components/dashboard/StatCard.tsx",
+          "frontend/src/App.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/components/layout/Layout.tsx",
+          "frontend/src/pages/Dashboard.tsx",
+          "frontend/src/components/dashboard/StatCard.tsx",
+          "frontend/src/App.tsx"
+        ]
+      },
+      {
+        "id": "REQ-11",
+        "summary": "Enforce all system validation rules in the backend: orders cannot be approved without being in 'Pending Approval' status; QR codes are never generated before approval; Order IDs are unique and auto-incremented; duplicate QR scans at any stage are rejected; all stage transitions are enforced in sequence; orders are permanently locked after 'Delivered'; all stage timestamps are recorded; GPS coordinates are required for Stage 3 and Stage 4 scans.",
+        "status": "unknown",
+        "plannedFiles": [],
+        "matchedFiles": []
+      },
+      {
+        "id": "REQ-12",
+        "summary": "Apply a cohesive visual theme across the entire application: water-blue primary palette (deep ocean blues and clear aqua accents), clean white backgrounds, subtle soft-shadow cards, bold sans-serif typography, smooth hover and transition animations, and a professional distribution SaaS aesthetic. The Vitalist Water brand name and logo/wordmark should appear in the sidebar header and on invoices.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/index.css",
+          "frontend/tailwind.config.js",
+          "frontend/public/index.html"
+        ],
+        "matchedFiles": [
+          "frontend/src/index.css",
+          "frontend/tailwind.config.js"
+        ]
+      },
+      {
+        "id": "REQ-2",
+        "summary": "Implement a Store Management module. Each store record stores: Store Name, Owner Name, Mobile Number, Full Address, Landmark, Latitude, Longitude, and Creation Timestamp. The Add Store form includes a 'Use Current Location' button that auto-fills Latitude and Longitude using the browser Geolocation API, plus a live map preview (using an embedded map or coordinate display) with a manual pin/coordinate adjustment option. Admin can add, edit, and delete stores. Stores are listed in a searchable table.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/pages/admin/StoreManagementPage.tsx",
+          "frontend/src/components/stores/StoreForm.tsx",
+          "frontend/src/components/stores/StoreTable.tsx",
+          "frontend/src/hooks/useStores.ts"
+        ],
+        "matchedFiles": [
+          "frontend/src/pages/admin/StoreManagementPage.tsx"
+        ]
+      },
+      {
+        "id": "REQ-3",
+        "summary": "Implement the Order Creation flow for Staff. The form includes: Select Store (dropdown from store list), Quantity, Rate, and Notes. On submission, the backend auto-generates a unique Order ID in the format VW-YYYY-XXXX (e.g., VW-2026-0001) using the current year and an auto-incrementing counter. The backend sets the order status to 'Pending Approval', stores the creation timestamp, and creates a draft invoice record. Order IDs must be unique with no duplicates and cannot be manually set.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/pages/staff/OrderCreationPage.tsx",
+          "frontend/src/components/orders/OrderForm.tsx",
+          "frontend/src/hooks/useOrders.ts"
+        ],
+        "matchedFiles": [
+          "frontend/src/pages/staff/OrderCreationPage.tsx"
+        ]
+      },
+      {
+        "id": "REQ-4",
+        "summary": "Implement the Admin Order Approval flow. Admin views all orders with 'Pending Approval' status and can approve or cancel them. On approval, the status changes to 'Approved' and a QR code is generated containing the encrypted Order ID (base64 or simple encoding of the Order ID string). The QR code is stored linked to the order. One QR per order; QR cannot be regenerated once created without admin explicitly triggering regeneration (which requires cancelling the existing QR). Cancelled orders are marked as 'Cancelled' and locked.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/pages/admin/OrderApprovalPage.tsx",
+          "frontend/src/components/orders/OrderApprovalTable.tsx",
+          "frontend/src/components/qr/QRCodeDisplay.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/components/qr/QRCodeDisplay.tsx"
+        ]
+      },
+      {
+        "id": "REQ-5",
+        "summary": "Implement the 4-stage controlled order workflow with QR scanning at each stage. Stage 1 (Admin Scan): Admin scans QR; status changes from 'Approved' to 'Ready'; packing confirmed; timestamp saved; duplicate scan blocked. Stage 2 (Staff Scan): Staff scans QR; status changes from 'Ready' to 'Dispatched'; handover confirmed; timestamp logged. Stage 3 (Delivery Scan – Start): Delivery user scans QR; status changes from 'Dispatched' to 'Out for Delivery'; GPS coordinates captured; delivery timer started; timestamp logged. Stage 4 (Delivery Scan – Complete): Delivery user scans QR again; status changes from 'Out for Delivery' to 'Delivered'; GPS coordinates captured; order permanently locked; no re-scan permitted. Each stage transition is validated server-side to enforce ordering; scanning an already-processed QR at the wrong stage is rejected.",
+        "status": "missing",
+        "plannedFiles": [
+          "frontend/src/pages/admin/AdminScanPage.tsx",
+          "frontend/src/pages/staff/StaffScanPage.tsx",
+          "frontend/src/pages/delivery/DeliveryScanStartPage.tsx",
+          "frontend/src/pages/delivery/DeliveryScanCompletePage.tsx",
+          "frontend/src/components/qr/QRScanner.tsx"
+        ],
+        "matchedFiles": []
+      },
+      {
+        "id": "REQ-6",
+        "summary": "Implement camera-based QR scanning using the device camera (via jsQR or a React QR scanner library). When a user taps/clicks 'Scan QR', the camera opens in a modal/overlay and scans in real-time without manual entry. On successful scan, the encoded Order ID is extracted, the order is fetched from the backend, the current stage transition is validated, and the status is updated. No manual QR code text entry is permitted in the scanning flow.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/components/qr/QRScanModal.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/components/qr/QRScanModal.tsx"
+        ]
+      },
+      {
+        "id": "REQ-7",
+        "summary": "Implement the Automated Invoice System. An invoice is created as a draft when an order is placed. The invoice includes: Vitalist Water branding, Order ID, Invoice Number, Store details and address, Quantity, Rate, Total Amount (Quantity × Rate), Date & Time, and the QR code image (only after admin approval). Admin can view the invoice and trigger a print-friendly PDF download using browser print or a library like jsPDF/html2canvas. The invoice updates automatically when the order reaches 'Delivered' status.",
+        "status": "missing",
+        "plannedFiles": [
+          "frontend/src/pages/admin/InvoicePage.tsx",
+          "frontend/src/components/invoices/InvoiceTemplate.tsx",
+          "frontend/src/hooks/useInvoice.ts"
+        ],
+        "matchedFiles": []
+      },
+      {
+        "id": "REQ-8",
+        "summary": "Implement the mobile-optimized Delivery Panel. Display a list of orders assigned to the logged-in delivery user (status: Dispatched or Out for Delivery). Each order card shows: Store Name, Owner Contact Number, estimated distance to store (calculated from stored GPS coordinates and current device location), an 'Open in Google Maps' button (deep link with store latitude/longitude), and a large 'Scan QR' button. When delivery is started (Stage 3 scan), initiate a delivery timer. The panel must be fully responsive and optimized for mobile screens.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/pages/delivery/DeliveryDashboard.tsx",
+          "frontend/src/components/delivery/OrderCard.tsx",
+          "frontend/src/utils/geoUtils.ts"
+        ],
+        "matchedFiles": [
+          "frontend/src/pages/delivery/DeliveryDashboard.tsx",
+          "frontend/src/utils/geoUtils.ts"
+        ]
+      },
+      {
+        "id": "REQ-9",
+        "summary": "Implement the Advanced Order Management Panel for Admin. Features: view all orders in a paginated/scrollable table; filter by date range (From/To in DD-MM-YYYY format), by store, and by status; search by Order ID; view full order details in a modal/drawer; download invoice PDF; monitor delivery progress per order. The backend must support query parameters for date-range filtering, store filtering, status filtering, and Order ID search.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/pages/admin/OrderManagementPage.tsx",
+          "frontend/src/components/orders/OrderFilters.tsx",
+          "frontend/src/components/orders/OrderTable.tsx",
+          "frontend/src/components/orders/OrderDetailsModal.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/pages/admin/OrderManagementPage.tsx"
+        ]
+      }
+    ]
+  },
+  "changedFiles": [
+    "backend/authorization/MixinAuthorization.mo",
+    "backend/authorization/access-control.mo",
+    "backend/main.mo",
+    "build-request.json",
+    "build-template/Dockerfile",
+    "build-template/LICENSE",
+    "build-template/README.md",
+    "build-template/deploy.sh",
+    "build-template/icp.yaml",
+    "build-template/package.json",
+    "build-template/pnpm-lock.yaml",
+    "build-template/pnpm-workspace.yaml",
+    "build-template/scripts/prune-unused-images.js",
+    "build-template/scripts/resize-images.js",
+    "build-template/src/backend/canister.yaml",
+    "build-template/src/backend/system-idl/aaaaa-aa.did",
+    "build-template/src/frontend/canister.yaml",
+    "build-template/src/frontend/components.json",
+    "build-template/src/frontend/env.json",
+    "build-template/src/frontend/eslint-rules/no-bigint-in-query-keys.js",
+    "build-template/src/frontend/eslint-rules/require-internet-identity-provider.js",
+    "build-template/src/frontend/eslint.config.js",
+    "build-template/src/frontend/package.json",
+    "build-template/src/frontend/postcss.config.js",
+    "build-template/src/frontend/src/components/ui/accordion.tsx",
+    "build-template/src/frontend/src/components/ui/alert-dialog.tsx",
+    "build-template/src/frontend/src/components/ui/alert.tsx",
+    "build-template/src/frontend/src/components/ui/aspect-ratio.tsx",
+    "build-template/src/frontend/src/components/ui/avatar.tsx",
+    "build-template/src/frontend/src/components/ui/badge.tsx",
+    "build-template/src/frontend/src/components/ui/breadcrumb.tsx",
+    "build-template/src/frontend/src/components/ui/button.tsx",
+    "build-template/src/frontend/src/components/ui/calendar.tsx",
+    "build-template/src/frontend/src/components/ui/card.tsx",
+    "build-template/src/frontend/src/components/ui/carousel.tsx",
+    "build-template/src/frontend/src/components/ui/chart.tsx",
+    "build-template/src/frontend/src/components/ui/checkbox.tsx",
+    "build-template/src/frontend/src/components/ui/collapsible.tsx",
+    "build-template/src/frontend/src/components/ui/command.tsx",
+    "build-template/src/frontend/src/components/ui/context-menu.tsx",
+    "build-template/src/frontend/src/components/ui/dialog.tsx",
+    "build-template/src/frontend/src/components/ui/drawer.tsx",
+    "build-template/src/frontend/src/components/ui/dropdown-menu.tsx",
+    "build-template/src/frontend/src/components/ui/form.tsx",
+    "build-template/src/frontend/src/components/ui/hover-card.tsx",
+    "build-template/src/frontend/src/components/ui/input-otp.tsx",
+    "build-template/src/frontend/src/components/ui/input.tsx",
+    "build-template/src/frontend/src/components/ui/label.tsx",
+    "build-template/src/frontend/src/components/ui/menubar.tsx",
+    "build-template/src/frontend/src/components/ui/navigation-menu.tsx",
+    "build-template/src/frontend/src/components/ui/pagination.tsx",
+    "build-template/src/frontend/src/components/ui/popover.tsx",
+    "build-template/src/frontend/src/components/ui/progress.tsx",
+    "build-template/src/frontend/src/components/ui/radio-group.tsx",
+    "build-template/src/frontend/src/components/ui/resizable.tsx",
+    "build-template/src/frontend/src/components/ui/scroll-area.tsx",
+    "build-template/src/frontend/src/components/ui/select.tsx",
+    "build-template/src/frontend/src/components/ui/separator.tsx",
+    "build-template/src/frontend/src/components/ui/sheet.tsx",
+    "build-template/src/frontend/src/components/ui/sidebar.tsx",
+    "build-template/src/frontend/src/components/ui/skeleton.tsx",
+    "build-template/src/frontend/src/components/ui/slider.tsx",
+    "build-template/src/frontend/src/components/ui/sonner.tsx",
+    "build-template/src/frontend/src/components/ui/switch.tsx",
+    "build-template/src/frontend/src/components/ui/table.tsx",
+    "build-template/src/frontend/src/components/ui/tabs.tsx",
+    "build-template/src/frontend/src/components/ui/textarea.tsx",
+    "build-template/src/frontend/src/components/ui/toggle-group.tsx",
+    "build-template/src/frontend/src/components/ui/toggle.tsx",
+    "build-template/src/frontend/src/components/ui/tooltip.tsx",
+    "build-template/src/frontend/src/hooks/use-mobile.tsx",
+    "build-template/src/frontend/src/lib/utils.ts",
+    "build-template/src/frontend/tsconfig.json",
+    "build-template/src/frontend/vite.config.js",
+    "build-template/tsconfig.json",
+    "caffeine.lock.json",
+    "feature_evidence.json",
+    "frontend-file-summaries.txt",
+    "frontend-implementation-plan.json",
+    "frontend/index.css",
+    "frontend/index.html",
+    "frontend/public/assets/generated/vitalist-icon.dim_64x64.png",
+    "frontend/public/assets/generated/vitalist-logo.dim_320x80.png",
+    "frontend/src/App.tsx",
+    "frontend/src/backend.d.ts",
+    "frontend/src/backend.ts",
+    "frontend/src/camera/useCamera.ts",
+    "frontend/src/components/dashboard/StatCard.tsx",
+    "frontend/src/components/layout/AppSidebar.tsx",
+    "frontend/src/components/layout/Layout.tsx",
+    "frontend/src/components/orders/StatusBadge.tsx",
+    "frontend/src/components/qr/QRCodeDisplay.tsx",
+    "frontend/src/components/qr/QRScanModal.tsx",
+    "frontend/src/config.ts",
+    "frontend/src/contexts/AuthContext.tsx",
+    "frontend/src/declarations/backend.did.d.ts",
+    "frontend/src/declarations/backend.did.js",
+    "frontend/src/hooks/useActor.ts",
+    "frontend/src/hooks/useInternetIdentity.ts",
+    "frontend/src/hooks/useQueries.ts",
+    "frontend/src/index.css",
+    "frontend/src/main.tsx",
+    "frontend/src/pages/Dashboard.tsx",
+    "frontend/src/pages/LoginPage.tsx",
+    "frontend/src/pages/ScanPage.tsx",
+    "frontend/src/pages/SettingsPage.tsx",
+    "frontend/src/pages/admin/OrderManagementPage.tsx",
+    "frontend/src/pages/admin/QRManagementPage.tsx",
+    "frontend/src/pages/admin/ReportsPage.tsx",
+    "frontend/src/pages/admin/StoreManagementPage.tsx",
+    "frontend/src/pages/admin/UserManagementPage.tsx",
+    "frontend/src/pages/delivery/DeliveryDashboard.tsx",
+    "frontend/src/pages/staff/OrderCreationPage.tsx",
+    "frontend/src/qr-code/useQRScanner.ts",
+    "frontend/src/ui-summary.json",
+    "frontend/src/utils/StorageClient.ts",
+    "frontend/src/utils/geoUtils.ts",
+    "frontend/src/utils/orderUtils.ts",
+    "frontend/src/utils/qrGenerator.ts",
+    "frontend/src/utils/urlParams.ts",
+    "frontend/tailwind.config.js",
+    "project_state.json",
+    "scratch/component-selection.json",
+    "spec.md",
+    "spec_vs_diff_report.json"
+  ]
+}

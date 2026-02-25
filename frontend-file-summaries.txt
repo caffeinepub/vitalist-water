@@ -1,0 +1,11 @@
+{
+  "frontend/src/App.tsx": "Root application component that wraps everything in AuthProvider, handles role-based page routing via state, and renders the appropriate page component inside the Layout shell based on the current user's role and selected navigation item.",
+  "frontend/src/components/qr/QRScanModal.tsx": "Camera-based QR scanning modal using the useQRScanner hook (imported via relative path to fix the module resolution error), with live camera preview, scan overlay, success/error feedback, and automatic order ID extraction.",
+  "frontend/src/pages/ScanPage.tsx": "Reusable QR scan page supporting all three workflow stages (Admin Stage 1, Staff Stage 2, Delivery Stage 3/4), showing eligible orders, triggering the QRScanModal, and updating order status with GPS capture where required.",
+  "frontend/src/pages/delivery/DeliveryDashboard.tsx": "Mobile-optimized delivery dashboard showing dispatched/out-for-delivery orders with store details, GPS distance calculation, Google Maps deep-link, and a Scan QR button for stage 3/4 transitions.",
+  "frontend/src/pages/admin/QRManagementPage.tsx": "Admin QR management page displaying a grid of all generated QR codes for approved orders, with stats cards, search filtering, and QR code image display per order.",
+  "frontend/src/pages/admin/UserManagementPage.tsx": "Admin user management page with a table of all system users, role badges, and Add/Edit/Delete functionality via dialogs, mapping backend UserRole enum values to display labels.",
+  "frontend/src/pages/admin/ReportsPage.tsx": "Admin reports page showing order analytics including today/week/month counts, status breakdown bar charts, top stores by order volume, and overall delivery rate summary.",
+  "frontend/src/pages/SettingsPage.tsx": "Settings page showing current user profile info, system information, sign-out button, and footer attribution with caffeine.ai link.",
+  "frontend/src/hooks/useQueries.ts": "React Query hooks for all backend operations (stores, orders, users) with proper cache invalidation; removed unused UserRole import to fix TypeScript warnings."
+}

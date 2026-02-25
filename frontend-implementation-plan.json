@@ -1,0 +1,353 @@
+{
+  "kind": "implementation_plan",
+  "version": "1.0",
+  "title": "Vitalist Water — Frontend Implementation Plan",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "summary": "Implement role-based authentication UI with login page, role guards, and user management interface for Admin",
+      "acceptanceCriteria": [
+        "Login page accepts email and password and authenticates against stored credentials",
+        "Admin, Staff, and Delivery demo accounts are pre-seeded and functional",
+        "Each role is redirected to its respective dashboard after login",
+        "Pages not permitted for a role are inaccessible (redirect to login or error)",
+        "Admin can create, edit, and delete user accounts from the Settings or Users panel"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/pages/LoginPage.tsx",
+          "operation": "create",
+          "description": "Create login page with email/password form. On successful authentication, store session token and role in context/state, then redirect to role-specific dashboard (Admin → /admin/dashboard, Staff → /staff/dashboard, Delivery → /delivery/dashboard). Use the authorization component to handle authentication flow. Verify the component's usage instructions before implementing."
+        },
+        {
+          "path": "frontend/src/contexts/AuthContext.tsx",
+          "operation": "create",
+          "description": "Create authentication context to store current user session (token, role, email) and provide login/logout functions. Expose role-checking helpers (isAdmin, isStaff, isDelivery) for component consumption. Use the authorization component's authentication system. Verify the component's usage instructions before implementing."
+        },
+        {
+          "path": "frontend/src/components/auth/RoleGuard.tsx",
+          "operation": "create",
+          "description": "Create RoleGuard wrapper component that checks user role against allowed roles array. If unauthorized, redirect to login or show access denied. Use authorization component's role-checking capabilities. Verify the component's usage instructions before implementing."
+        },
+        {
+          "path": "frontend/src/pages/admin/UserManagementPage.tsx",
+          "operation": "create",
+          "description": "Create admin-only user management page with table listing all users (email, role). Include Add User form (email, password, role dropdown) and Edit/Delete actions per row. Call backend methods addUser, updateUser, deleteUser, getAllUsers. Wrap with RoleGuard for admin-only access."
+        },
+        {
+          "path": "frontend/src/hooks/useAuth.ts",
+          "operation": "create",
+          "description": "Create custom hook to consume AuthContext and expose authentication state (isAuthenticated, currentUser, role) and actions (login, logout). Use the authorization component's authentication helpers. Verify the component's usage instructions before implementing."
+        },
+        {
+          "path": "frontend/src/App.tsx",
+          "operation": "modify",
+          "description": "Wrap app with AuthContext provider. Define routes for /login, /admin/*, /staff/*, /delivery/* with RoleGuard wrappers enforcing role-based access. Redirect unauthenticated users to /login."
+        }
+      ]
+    },
+    {
+      "id": "REQ-2",
+      "summary": "Implement Store Management UI with GPS auto-fill, live coordinate preview, and CRUD operations",
+      "acceptanceCriteria": [
+        "Admin can add a store with all required fields including GPS coordinates",
+        "'Use Current Location' button auto-fills latitude and longitude via browser geolocation",
+        "Live map preview (coordinate display or embedded map) updates when coordinates change",
+        "Coordinates can be manually adjusted",
+        "Store list is displayed and searchable; Admin can edit and delete stores"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/pages/admin/StoreManagementPage.tsx",
+          "operation": "create",
+          "description": "Create admin-only store management page with searchable table listing all stores (storeName, ownerName, mobileNumber, address, landmark, coordinates). Include Add Store and Edit/Delete actions. Call backend methods addStore, getAllStores, updateStore, deleteStore. Wrap with RoleGuard for admin-only access."
+        },
+        {
+          "path": "frontend/src/components/stores/StoreForm.tsx",
+          "operation": "create",
+          "description": "Create StoreForm component with fields: Store Name, Owner Name, Mobile Number, Full Address, Landmark, Latitude, Longitude. Include 'Use Current Location' button that calls browser Geolocation API to auto-fill latitude/longitude. Display live coordinate preview (text display showing current lat/lng values). Allow manual coordinate adjustment. On submit, call backend addStore or updateStore."
+        },
+        {
+          "path": "frontend/src/components/stores/StoreTable.tsx",
+          "operation": "create",
+          "description": "Create StoreTable component displaying stores in a table with search filter input. Include Edit and Delete action buttons per row. Emit edit/delete events to parent page."
+        },
+        {
+          "path": "frontend/src/hooks/useStores.ts",
+          "operation": "create",
+          "description": "Create custom hook using React Query to fetch, add, update, and delete stores via backend methods. Expose stores list, loading state, and mutation functions (addStore, updateStore, deleteStore)."
+        }
+      ]
+    },
+    {
+      "id": "REQ-3",
+      "summary": "Implement Order Creation UI for Staff with store selection, quantity/rate inputs, and auto-generated Order ID display",
+      "acceptanceCriteria": [
+        "Staff can create an order by selecting a store, entering quantity, rate, and notes",
+        "System generates a unique Order ID in VW-YYYY-XXXX format automatically",
+        "Order is saved with status 'Pending Approval' and a creation timestamp",
+        "A draft invoice record is created alongside the order",
+        "Duplicate Order IDs cannot exist; the counter increments reliably"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/pages/staff/OrderCreationPage.tsx",
+          "operation": "create",
+          "description": "Create staff-only order creation page with form: Select Store (dropdown populated from backend getAllStores), Quantity input, Rate input, Notes textarea. On submit, call backend createOrder. Display success message with generated Order ID after submission. Wrap with RoleGuard for staff-only access."
+        },
+        {
+          "path": "frontend/src/components/orders/OrderForm.tsx",
+          "operation": "create",
+          "description": "Create OrderForm component with store dropdown, quantity, rate, notes fields. Fetch stores list for dropdown options. On submit, call backend createOrder and handle success/error responses. Display generated Order ID on success."
+        },
+        {
+          "path": "frontend/src/hooks/useOrders.ts",
+          "operation": "create",
+          "description": "Create custom hook using React Query to fetch orders (getAllOrders, getOrder) and create orders (createOrder). Expose orders list, loading state, and mutation functions."
+        }
+      ]
+    },
+    {
+      "id": "REQ-4",
+      "summary": "Implement Admin Order Approval UI with QR code generation and order cancellation",
+      "acceptanceCriteria": [
+        "Admin can approve a 'Pending Approval' order; status changes to 'Approved'",
+        "QR code is generated and stored upon approval, containing the encoded Order ID",
+        "Only one QR exists per order",
+        "Admin can cancel orders; cancelled orders are locked with status 'Cancelled'",
+        "QR cannot be regenerated automatically; admin must take explicit action"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/pages/admin/OrderApprovalPage.tsx",
+          "operation": "create",
+          "description": "Create admin-only order approval page displaying all orders with status 'Pending Approval' in a table. Each row includes Approve and Cancel buttons. On approve, call backend updateOrder to change status to 'Approved' and trigger QR generation. On cancel, call backend updateOrder to set status to 'Cancelled'. Wrap with RoleGuard for admin-only access."
+        },
+        {
+          "path": "frontend/src/components/orders/OrderApprovalTable.tsx",
+          "operation": "create",
+          "description": "Create OrderApprovalTable component displaying pending orders with Order ID, Store Name, Quantity, Rate, Notes, and action buttons (Approve/Cancel). Emit approve/cancel events to parent page."
+        },
+        {
+          "path": "frontend/src/components/qr/QRCodeDisplay.tsx",
+          "operation": "create",
+          "description": "Create QRCodeDisplay component to render QR code image for an approved order. Accept Order ID as prop and display the generated QR code (fetched from backend or generated client-side using a QR library like qrcode.react)."
+        }
+      ]
+    },
+    {
+      "id": "REQ-5",
+      "summary": "Implement 4-stage QR scanning workflow UI with stage-specific scan pages and status transitions",
+      "acceptanceCriteria": [
+        "Stage 1: Admin scans QR → status changes Approved → Ready with timestamp; duplicate scans are rejected",
+        "Stage 2: Staff scans QR → status changes Ready → Dispatched with timestamp",
+        "Stage 3: Delivery scans QR → status changes Dispatched → Out for Delivery; GPS and timestamp recorded",
+        "Stage 4: Delivery scans QR → status changes Out for Delivery → Delivered; GPS recorded; order locked",
+        "Scanning out of sequence is rejected by the backend",
+        "Delivered orders cannot be scanned again"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/pages/admin/AdminScanPage.tsx",
+          "operation": "create",
+          "description": "Create admin-only QR scan page for Stage 1 (Approved → Ready). Use the qr-code component to open camera-based QR scanner. On successful scan, extract Order ID, call backend updateOrder to transition status to 'Ready', and display success/error feedback. Verify the component's usage instructions before implementing. Wrap with RoleGuard for admin-only access."
+        },
+        {
+          "path": "frontend/src/pages/staff/StaffScanPage.tsx",
+          "operation": "create",
+          "description": "Create staff-only QR scan page for Stage 2 (Ready → Dispatched). Use the qr-code component to open camera-based QR scanner. On successful scan, extract Order ID, call backend updateOrder to transition status to 'Dispatched', and display success/error feedback. Verify the component's usage instructions before implementing. Wrap with RoleGuard for staff-only access."
+        },
+        {
+          "path": "frontend/src/pages/delivery/DeliveryScanStartPage.tsx",
+          "operation": "create",
+          "description": "Create delivery-only QR scan page for Stage 3 (Dispatched → Out for Delivery). Use the qr-code component to open camera-based QR scanner. On successful scan, extract Order ID, capture GPS coordinates via browser Geolocation API, call backend updateOrder to transition status to 'Out for Delivery' with GPS data, and display success/error feedback. Verify the component's usage instructions before implementing. Wrap with RoleGuard for delivery-only access."
+        },
+        {
+          "path": "frontend/src/pages/delivery/DeliveryScanCompletePage.tsx",
+          "operation": "create",
+          "description": "Create delivery-only QR scan page for Stage 4 (Out for Delivery → Delivered). Use the qr-code component to open camera-based QR scanner. On successful scan, extract Order ID, capture GPS coordinates via browser Geolocation API, call backend updateOrder to transition status to 'Delivered' with GPS data, and display success/error feedback. Verify the component's usage instructions before implementing. Wrap with RoleGuard for delivery-only access."
+        },
+        {
+          "path": "frontend/src/components/qr/QRScanner.tsx",
+          "operation": "create",
+          "description": "Create reusable QRScanner component wrapping the qr-code component's useQRScanner hook. Display camera preview with video element, scan controls (start/stop/switch camera), and result feedback. Emit scanned Order ID to parent component. Use the qr-code component to provide camera-based QR scanning. Verify the component's usage instructions before implementing."
+        }
+      ]
+    },
+    {
+      "id": "REQ-6",
+      "summary": "Implement camera-based QR scanning UI using device camera with real-time detection and no manual entry",
+      "acceptanceCriteria": [
+        "Clicking 'Scan QR' opens a camera-based scanning overlay/modal",
+        "QR is detected and decoded in real-time from the camera feed",
+        "Order ID is extracted from the QR and a status-update request is sent to the backend",
+        "Success/failure feedback is shown after scan",
+        "No text input field for manual QR entry is present in the scanning UI"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/components/qr/QRScanModal.tsx",
+          "operation": "create",
+          "description": "Create QRScanModal component as an overlay/modal that opens when 'Scan QR' is clicked. Use the qr-code component's useQRScanner hook to activate camera and scan QR codes in real-time. Display camera preview in the modal. On successful scan, extract Order ID, close modal, and emit scanned data to parent. Show success/error toast after scan. Do not include manual text input. Use the qr-code component to provide camera-based QR scanning. Verify the component's usage instructions before implementing."
+        }
+      ]
+    },
+    {
+      "id": "REQ-7",
+      "summary": "Implement Automated Invoice UI with PDF download, print, and QR code display after approval",
+      "acceptanceCriteria": [
+        "Invoice is created as a draft on order creation and associated with the order",
+        "Invoice displays all required fields including branding, store details, totals, and timestamps",
+        "QR code appears on the invoice only after admin approval",
+        "Admin can download/print the invoice as PDF",
+        "Invoice status and content reflect 'Delivered' completion when order is delivered"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/pages/admin/InvoicePage.tsx",
+          "operation": "create",
+          "description": "Create admin invoice page displaying invoice for a given Order ID. Fetch order and store details from backend. Display Vitalist Water branding (use generated logo image at frontend/public/assets/generated/vitalist-logo.dim_320x80.png), Order ID, Invoice Number, Store Name, Address, Quantity, Rate, Total Amount, Date & Time, and QR code image (only if order status is 'Approved' or later). Include Download PDF and Print buttons using browser print API or a library like jsPDF/html2canvas. Wrap with RoleGuard for admin-only access."
+        },
+        {
+          "path": "frontend/src/components/invoices/InvoiceTemplate.tsx",
+          "operation": "create",
+          "description": "Create InvoiceTemplate component to render printable/downloadable invoice layout. Include Vitalist Water logo image (frontend/public/assets/generated/vitalist-logo.dim_320x80.png), order details, store details, totals, timestamps, and QR code image. Style for print/PDF export compatibility."
+        },
+        {
+          "path": "frontend/src/hooks/useInvoice.ts",
+          "operation": "create",
+          "description": "Create custom hook to fetch invoice data for a given Order ID. Fetch order and store details from backend and compute total amount. Expose invoice data and loading state."
+        }
+      ]
+    },
+    {
+      "id": "REQ-8",
+      "summary": "Implement mobile-optimized Delivery Panel with order list, distance calculation, Google Maps navigation, and QR scan button",
+      "acceptanceCriteria": [
+        "Delivery user sees only their assigned orders in Dispatched or Out for Delivery status",
+        "Each order card shows store name, contact, distance, Google Maps link, and Scan QR button",
+        "Google Maps button opens navigation to the store's GPS coordinates in a new tab/app",
+        "Distance is computed from the device's current geolocation to the store's stored coordinates",
+        "Panel is fully responsive and usable on mobile screens"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/pages/delivery/DeliveryDashboard.tsx",
+          "operation": "create",
+          "description": "Create delivery-only dashboard page displaying assigned orders (status: Dispatched or Out for Delivery). Each order card shows Store Name, Owner Contact Number, distance to store (calculated from device GPS and store coordinates), 'Open in Google Maps' button (deep link: https://www.google.com/maps?q=LAT,LNG), and large 'Scan QR' button. Fetch orders from backend and filter by assigned delivery user. Use browser Geolocation API to get current position and calculate distance. Fully responsive for mobile. Wrap with RoleGuard for delivery-only access."
+        },
+        {
+          "path": "frontend/src/components/delivery/OrderCard.tsx",
+          "operation": "create",
+          "description": "Create OrderCard component displaying store name, contact, distance, Google Maps button, and Scan QR button. Accept order and current GPS position as props. Calculate distance using Haversine formula. Emit scan action to parent."
+        },
+        {
+          "path": "frontend/src/utils/geoUtils.ts",
+          "operation": "create",
+          "description": "Create utility functions for GPS calculations: calculateDistance (Haversine formula to compute distance between two lat/lng points) and getCurrentPosition (wrapper around browser Geolocation API)."
+        }
+      ]
+    },
+    {
+      "id": "REQ-9",
+      "summary": "Implement Advanced Order Management Panel for Admin with filters, search, and order details modal",
+      "acceptanceCriteria": [
+        "Admin can view all orders in a table with pagination or scroll",
+        "Filters for date range, store, and status are functional and update the order list",
+        "Search by Order ID returns the matching order",
+        "Full order details are accessible from the table row",
+        "Invoice download is available per order from the table",
+        "Delivery progress/status is visible per order"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/pages/admin/OrderManagementPage.tsx",
+          "operation": "create",
+          "description": "Create admin-only advanced order management page with filters (date range: From/To in DD-MM-YYYY format, store dropdown, status dropdown), search by Order ID input, and paginated/scrollable order table. Include View Details, Download Invoice, and Monitor Progress actions per row. Fetch all orders from backend and apply filters client-side or via backend query parameters. Wrap with RoleGuard for admin-only access."
+        },
+        {
+          "path": "frontend/src/components/orders/OrderFilters.tsx",
+          "operation": "create",
+          "description": "Create OrderFilters component with date range pickers (From/To), store dropdown, status dropdown, and Order ID search input. Emit filter changes to parent page."
+        },
+        {
+          "path": "frontend/src/components/orders/OrderTable.tsx",
+          "operation": "create",
+          "description": "Create OrderTable component displaying orders in a table with columns: Order ID, Store Name, Status, Quantity, Rate, Total, Date. Include View Details, Download Invoice, and Monitor Progress action buttons per row. Support pagination or infinite scroll."
+        },
+        {
+          "path": "frontend/src/components/orders/OrderDetailsModal.tsx",
+          "operation": "create",
+          "description": "Create OrderDetailsModal component to display full order details in a modal/drawer. Show Order ID, Store Name, Store Address, Quantity, Rate, Total, Status, Notes, Creation Timestamp, and stage transition timestamps. Accept order data as prop."
+        }
+      ]
+    },
+    {
+      "id": "REQ-10",
+      "summary": "Implement professional SaaS UI shell with fixed sidebar navigation, responsive layout, and Dashboard with summary stat cards",
+      "acceptanceCriteria": [
+        "Sidebar with all listed navigation items is present and functional",
+        "Dashboard displays 5 summary stat cards with live counts from the backend",
+        "Sidebar collapses to a hamburger menu on mobile screens",
+        "Water-blue color palette is consistently applied across all pages",
+        "Smooth CSS transitions are present on hover states, modals, and page navigation",
+        "Layout is usable on both desktop and mobile viewports"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/components/layout/Sidebar.tsx",
+          "operation": "create",
+          "description": "Create Sidebar component with fixed left navigation displaying Vitalist Water brand logo (frontend/public/assets/generated/vitalist-logo.dim_320x80.png) at the top and navigation items: Dashboard, Stores, Orders, Invoices, QR Management, Reports, Settings. Include role-based visibility (show only permitted items per role). Collapse to hamburger menu on mobile using responsive CSS/state. Apply water-blue theme styling with smooth hover transitions."
+        },
+        {
+          "path": "frontend/src/components/layout/Layout.tsx",
+          "operation": "create",
+          "description": "Create Layout component wrapping Sidebar and main content area. Apply responsive grid/flexbox layout with fixed sidebar on desktop and collapsible sidebar on mobile. Render children in the main content area."
+        },
+        {
+          "path": "frontend/src/pages/Dashboard.tsx",
+          "operation": "create",
+          "description": "Create Dashboard page displaying 5 summary stat cards: Total Orders Today, Pending, Ready, Out for Delivery, Delivered. Fetch order counts from backend (getAllOrders) and compute stats. Display cards in a responsive grid. Apply water-blue theme styling with soft shadows and smooth transitions. Show role-specific dashboard content if needed."
+        },
+        {
+          "path": "frontend/src/components/dashboard/StatCard.tsx",
+          "operation": "create",
+          "description": "Create StatCard component to display a single stat (label, count, optional icon). Apply water-blue theme styling with soft shadow, smooth hover effect, and clean typography."
+        },
+        {
+          "path": "frontend/src/App.tsx",
+          "operation": "modify",
+          "description": "Wrap all authenticated routes with Layout component to apply Sidebar and main content structure. Define routes for Dashboard, Stores, Orders, Invoices, QR Management, Reports, Settings pages. Apply RoleGuard wrappers per route to enforce role-based access."
+        }
+      ]
+    },
+    {
+      "id": "REQ-12",
+      "summary": "Apply cohesive water-blue visual theme with branding, typography, shadows, and smooth transitions across all pages",
+      "acceptanceCriteria": [
+        "Water-blue color palette is consistently used for primary actions, sidebar, and accents",
+        "Cards and panels use soft drop shadows",
+        "Typography is clean, readable, and consistent across all pages",
+        "Vitalist Water brand name appears in the sidebar and on invoice templates",
+        "Hover states and modal entrances use smooth CSS transitions"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/index.css",
+          "operation": "modify",
+          "description": "Define water-blue color palette CSS variables (primary, accent, deep ocean blue, clear aqua). Apply global typography styles (sans-serif font family, clean line heights). Set default card/panel shadow styles. Add smooth transition classes for hover and modal animations. Ensure consistent styling across all pages."
+        },
+        {
+          "path": "frontend/tailwind.config.js",
+          "operation": "modify",
+          "description": "Extend Tailwind theme with water-blue color palette (primary, accent, ocean, aqua). Define custom shadow utilities for soft drop shadows. Configure typography plugin for clean sans-serif font stack. Ensure responsive design breakpoints are configured."
+        },
+        {
+          "path": "frontend/public/index.html",
+          "operation": "modify",
+          "description": "Update page title to 'Vitalist Water — Order & Delivery Management'. Set favicon to frontend/public/assets/generated/vitalist-icon.dim_64x64.png. Ensure meta tags for responsive viewport are present."
+        }
+      ]
+    }
+  ]
+}
