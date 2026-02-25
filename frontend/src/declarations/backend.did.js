@@ -58,6 +58,15 @@ export const DistributorDelivery = IDL.Record({
   'truckNumber' : IDL.Text,
   'driverName' : IDL.Text,
 });
+export const CreateOrderInput = IDL.Record({
+  'invoicePDF' : IDL.Opt(IDL.Vec(IDL.Nat8)),
+  'storeId' : IDL.Nat,
+  'rate' : IDL.Float64,
+  'orderId' : IDL.Text,
+  'notes' : IDL.Text,
+  'timestamp' : IDL.Int,
+  'quantity' : IDL.Nat,
+});
 export const GpsLocation = IDL.Record({
   'latitude' : IDL.Float64,
   'longitude' : IDL.Float64,
@@ -75,6 +84,7 @@ export const OrderRecord = IDL.Record({
   'storeId' : IDL.Nat,
   'loadedTruckImage' : IDL.Opt(IDL.Vec(IDL.Nat8)),
   'rate' : IDL.Float64,
+  'assignedDeliveryUser' : IDL.Opt(IDL.Principal),
   'orderId' : IDL.Text,
   'gpsLocation' : IDL.Opt(GpsLocation),
   'notes' : IDL.Text,
@@ -139,12 +149,13 @@ export const idlService = IDL.Service({
     ),
   'approveOrder' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'assignDelivery' : IDL.Func([IDL.Text, IDL.Principal, IDL.Text], [], []),
   'createDistributorDelivery' : IDL.Func(
       [DistributorDelivery, IDL.Text],
       [],
       [],
     ),
-  'createOrder' : IDL.Func([OrderRecord, IDL.Text], [], []),
+  'createOrder' : IDL.Func([CreateOrderInput, IDL.Text], [], []),
   'deleteDistributorDelivery' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'deleteStore' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'deleteUser' : IDL.Func([IDL.Text, IDL.Text], [], []),
@@ -175,6 +186,11 @@ export const idlService = IDL.Service({
   'getAllOrders' : IDL.Func([IDL.Text], [IDL.Vec(OrderRecord)], ['query']),
   'getAllStores' : IDL.Func([IDL.Text], [IDL.Vec(Store)], ['query']),
   'getAllUsers' : IDL.Func([IDL.Text], [IDL.Vec(User)], ['query']),
+  'getAssignedOrdersForDeliveryUser' : IDL.Func(
+      [IDL.Principal, IDL.Text],
+      [IDL.Vec(OrderRecord)],
+      ['query'],
+    ),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getDeliveryVerificationRecords' : IDL.Func(
@@ -269,6 +285,11 @@ export const idlService = IDL.Service({
       [],
     ),
   'updateOrder' : IDL.Func([IDL.Text, OrderRecord, IDL.Text], [], []),
+  'updateOrderStatusByDeliveryUser' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Text],
+      [],
+      [],
+    ),
   'updateOrderStatusUsingQR' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
   'updateStore' : IDL.Func([IDL.Nat, Store, IDL.Text], [], []),
   'updateUser' : IDL.Func([IDL.Text, User, IDL.Text], [], []),
@@ -327,6 +348,15 @@ export const idlFactory = ({ IDL }) => {
     'truckNumber' : IDL.Text,
     'driverName' : IDL.Text,
   });
+  const CreateOrderInput = IDL.Record({
+    'invoicePDF' : IDL.Opt(IDL.Vec(IDL.Nat8)),
+    'storeId' : IDL.Nat,
+    'rate' : IDL.Float64,
+    'orderId' : IDL.Text,
+    'notes' : IDL.Text,
+    'timestamp' : IDL.Int,
+    'quantity' : IDL.Nat,
+  });
   const GpsLocation = IDL.Record({
     'latitude' : IDL.Float64,
     'longitude' : IDL.Float64,
@@ -344,6 +374,7 @@ export const idlFactory = ({ IDL }) => {
     'storeId' : IDL.Nat,
     'loadedTruckImage' : IDL.Opt(IDL.Vec(IDL.Nat8)),
     'rate' : IDL.Float64,
+    'assignedDeliveryUser' : IDL.Opt(IDL.Principal),
     'orderId' : IDL.Text,
     'gpsLocation' : IDL.Opt(GpsLocation),
     'notes' : IDL.Text,
@@ -408,12 +439,13 @@ export const idlFactory = ({ IDL }) => {
       ),
     'approveOrder' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'assignDelivery' : IDL.Func([IDL.Text, IDL.Principal, IDL.Text], [], []),
     'createDistributorDelivery' : IDL.Func(
         [DistributorDelivery, IDL.Text],
         [],
         [],
       ),
-    'createOrder' : IDL.Func([OrderRecord, IDL.Text], [], []),
+    'createOrder' : IDL.Func([CreateOrderInput, IDL.Text], [], []),
     'deleteDistributorDelivery' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'deleteStore' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'deleteUser' : IDL.Func([IDL.Text, IDL.Text], [], []),
@@ -444,6 +476,11 @@ export const idlFactory = ({ IDL }) => {
     'getAllOrders' : IDL.Func([IDL.Text], [IDL.Vec(OrderRecord)], ['query']),
     'getAllStores' : IDL.Func([IDL.Text], [IDL.Vec(Store)], ['query']),
     'getAllUsers' : IDL.Func([IDL.Text], [IDL.Vec(User)], ['query']),
+    'getAssignedOrdersForDeliveryUser' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Vec(OrderRecord)],
+        ['query'],
+      ),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getDeliveryVerificationRecords' : IDL.Func(
@@ -538,6 +575,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'updateOrder' : IDL.Func([IDL.Text, OrderRecord, IDL.Text], [], []),
+    'updateOrderStatusByDeliveryUser' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [],
+        [],
+      ),
     'updateOrderStatusUsingQR' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
         [],

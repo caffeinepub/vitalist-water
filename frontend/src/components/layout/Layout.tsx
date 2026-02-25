@@ -12,7 +12,7 @@ interface LayoutProps {
 }
 
 export default function Layout({ children, currentPage, onNavigate }: LayoutProps) {
-  const { currentUser, logout } = useAuth();
+  const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
@@ -35,7 +35,7 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
         `}
       >
         <AppSidebar
-          role={currentUser?.role ?? ''}
+          role={user?.role ?? ''}
           currentPage={currentPage}
           onNavigate={(page) => {
             onNavigate(page);
@@ -71,9 +71,9 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
               </div>
               <div className="hidden md:block">
                 <p className="text-sm font-medium text-foreground leading-none">
-                  {currentUser?.email ?? ''}
+                  {user?.email ?? ''}
                 </p>
-                <p className="text-xs text-muted-foreground capitalize mt-0.5">{currentUser?.role}</p>
+                <p className="text-xs text-muted-foreground capitalize mt-0.5">{user?.role}</p>
               </div>
             </div>
             <Button

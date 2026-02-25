@@ -78,9 +78,10 @@ function generateDeliveryId(): string {
 }
 
 export default function DistributorDeliveryManagementPage() {
-  const { isAdmin, user } = useAuth();
+  const { user } = useAuth();
   const { actor, isFetching: actorFetching } = useActor();
   const sessionEmail = user?.email ?? '';
+  const isAdmin = user?.role === 'admin';
 
   const { data: deliveries = [], isLoading, error } = useAllDistributorDeliveries(sessionEmail);
   const { data: orders = [] } = useAllOrders(sessionEmail);
@@ -181,7 +182,11 @@ export default function DistributorDeliveryManagementPage() {
       setForm(defaultForm);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      setFormError(msg.includes('Permission') ? 'Permission denied. Ensure you are logged in as admin.' : msg);
+      setFormError(
+        msg.includes('Permission')
+          ? 'Permission denied. Ensure you are logged in as admin.'
+          : msg
+      );
     }
   };
 
@@ -197,7 +202,8 @@ export default function DistributorDeliveryManagementPage() {
     }
   };
 
-  const isMutating = createMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
+  const isMutating =
+    createMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
 
   return (
     <div className="p-6 space-y-6">
@@ -215,7 +221,11 @@ export default function DistributorDeliveryManagementPage() {
           disabled={!actorReady || !isAdmin}
           className="flex items-center gap-2"
         >
-          {actorFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          {actorFetching ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Plus className="h-4 w-4" />
+          )}
           Create Delivery
         </Button>
       </div>
@@ -261,7 +271,9 @@ export default function DistributorDeliveryManagementPage() {
                     <TableCell>{delivery.driverName}</TableCell>
                     <TableCell>{delivery.driverContact}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {new Date(Number(delivery.estimatedDeliveryTime) / 1_000_000).toLocaleDateString()}
+                      {new Date(
+                        Number(delivery.estimatedDeliveryTime) / 1_000_000
+                      ).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -295,7 +307,9 @@ export default function DistributorDeliveryManagementPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editingId !== null ? 'Edit Delivery' : 'Create Delivery'}</DialogTitle>
+            <DialogTitle>
+              {editingId !== null ? 'Edit Delivery' : 'Create Delivery'}
+            </DialogTitle>
             <DialogDescription>
               {editingId !== null
                 ? 'Update delivery details below.'
@@ -323,7 +337,9 @@ export default function DistributorDeliveryManagementPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {approvedOrders.length === 0 ? (
-                    <SelectItem value="_none" disabled>No approved orders available</SelectItem>
+                    <SelectItem value="_none" disabled>
+                      No approved orders available
+                    </SelectItem>
                   ) : (
                     approvedOrders.map((o) => (
                       <SelectItem key={o.orderId} value={o.orderId}>
@@ -362,7 +378,9 @@ export default function DistributorDeliveryManagementPage() {
               <Label>Distributor Principal ID</Label>
               <Input
                 value={form.distributorPrincipal}
-                onChange={(e) => setForm((f) => ({ ...f, distributorPrincipal: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, distributorPrincipal: e.target.value }))
+                }
                 placeholder="Leave blank for anonymous"
               />
             </div>
@@ -371,7 +389,9 @@ export default function DistributorDeliveryManagementPage() {
               <Input
                 type="datetime-local"
                 value={form.estimatedDeliveryTime}
-                onChange={(e) => setForm((f) => ({ ...f, estimatedDeliveryTime: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, estimatedDeliveryTime: e.target.value }))
+                }
               />
             </div>
             <div className="space-y-2">
@@ -385,7 +405,11 @@ export default function DistributorDeliveryManagementPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isMutating}>
+            <Button
+              variant="outline"
+              onClick={() => setDialogOpen(false)}
+              disabled={isMutating}
+            >
               Cancel
             </Button>
             <Button onClick={handleSubmit} disabled={isMutating || !actorReady}>
@@ -394,25 +418,40 @@ export default function DistributorDeliveryManagementPage() {
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                   Saving...
                 </>
-              ) : editingId !== null ? 'Save Changes' : 'Create Delivery'}
+              ) : editingId !== null ? (
+                'Save Changes'
+              ) : (
+                'Create Delivery'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Delete Confirmation */}
-      <AlertDialog open={deleteConfirmId !== null} onOpenChange={(o) => !o && setDeleteConfirmId(null)}>
+      <AlertDialog
+        open={deleteConfirmId !== null}
+        onOpenChange={(o) => !o && setDeleteConfirmId(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Delivery</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this delivery assignment? This action cannot be undone.
+              Are you sure you want to delete this delivery assignment? This action cannot be
+              undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
-              Delete
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                'Delete'
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -22,6 +22,7 @@ export interface OrderRecord {
     storeId: bigint;
     loadedTruckImage?: Uint8Array;
     rate: number;
+    assignedDeliveryUser?: Principal;
     orderId: string;
     gpsLocation?: GpsLocation;
     notes: string;
@@ -56,6 +57,15 @@ export interface GpsLocation {
     latitude: number;
     longitude: number;
     timestamp: bigint;
+}
+export interface CreateOrderInput {
+    invoicePDF?: Uint8Array;
+    storeId: bigint;
+    rate: number;
+    orderId: string;
+    notes: string;
+    timestamp: bigint;
+    quantity: bigint;
 }
 export interface Store {
     latitude: number;
@@ -94,8 +104,9 @@ export interface backendInterface {
     }, sessionEmail: string): Promise<User>;
     approveOrder(orderId: string, newStatus: string, sessionEmail: string): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    assignDelivery(orderId: string, deliveryUser: Principal, sessionEmail: string): Promise<void>;
     createDistributorDelivery(delivery: DistributorDelivery, sessionEmail: string): Promise<void>;
-    createOrder(order: OrderRecord, sessionEmail: string): Promise<void>;
+    createOrder(input: CreateOrderInput, sessionEmail: string): Promise<void>;
     deleteDistributorDelivery(deliveryId: string, sessionEmail: string): Promise<void>;
     deleteStore(id: bigint, sessionEmail: string): Promise<void>;
     deleteUser(email: string, sessionEmail: string): Promise<void>;
@@ -112,6 +123,7 @@ export interface backendInterface {
     getAllOrders(sessionEmail: string): Promise<Array<OrderRecord>>;
     getAllStores(sessionEmail: string): Promise<Array<Store>>;
     getAllUsers(sessionEmail: string): Promise<Array<User>>;
+    getAssignedOrdersForDeliveryUser(deliveryUser: Principal, sessionEmail: string): Promise<Array<OrderRecord>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getDeliveryVerificationRecords(sessionEmail: string): Promise<Array<{
@@ -153,6 +165,7 @@ export interface backendInterface {
     submitDistributorConfirmation(orderId: string, barcodeScan: string, loadedTruckImage: Uint8Array, unloadedTruckImage: Uint8Array, sessionEmail: string): Promise<void>;
     updateDistributorDelivery(deliveryId: string, updatedDelivery: DistributorDelivery, sessionEmail: string): Promise<void>;
     updateOrder(orderId: string, updatedOrder: OrderRecord, sessionEmail: string): Promise<void>;
+    updateOrderStatusByDeliveryUser(orderId: string, newStatus: string, sessionEmail: string): Promise<void>;
     updateOrderStatusUsingQR(orderId: string, qrCodeValue: string, sessionEmail: string): Promise<void>;
     updateStore(id: bigint, store: Store, sessionEmail: string): Promise<void>;
     updateUser(email: string, updatedUser: User, sessionEmail: string): Promise<void>;

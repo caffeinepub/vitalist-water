@@ -1,186 +1,213 @@
 import React from 'react';
-import { OrderRecord, Store } from '@/backend';
-import { generateInvoiceNumber } from '@/utils/orderUtils';
-import QRCodeDisplay from '@/components/qr/QRCodeDisplay';
-import { Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import { Printer } from 'lucide-react';
+import { generateQRCodeURL } from '../../utils/qrGenerator';
+import type { OrderRecord, Store } from '../../backend';
 
 interface InvoiceViewProps {
   order: OrderRecord;
-  store?: Store | null;
-  storeId?: number;
+  store: Store | null;
 }
 
 export default function InvoiceView({ order, store }: InvoiceViewProps) {
-  const invoiceNumber = generateInvoiceNumber(order.orderId);
-  const createdAt = new Date(Number(order.timestamp) / 1_000_000);
-  const total = Number(order.quantity) * order.rate;
-  const hasQR = !!order.qrCode;
+  const [qrError, setQrError] = React.useState(false);
 
   const handlePrint = () => {
     window.print();
   };
 
+  const invoiceDate = new Date(Number(order.timestamp) / 1_000_000).toLocaleDateString('en-IN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  const quantity = Number(order.quantity);
+  const rate = Number(order.rate);
+  const subtotal = quantity * rate;
+  const gst = subtotal * 0.18;
+  const total = subtotal + gst;
+
+  // Determine QR code value: prefer stored qrCode.value, fallback to orderId
+  const qrValue = order.qrCode?.value ?? order.orderId;
+  const qrImageUrl = generateQRCodeURL(qrValue, 150);
+
   return (
-    <div>
-      {/* Print button - hidden in print */}
+    <div className="invoice-container p-6 bg-white text-gray-900 font-sans">
+      {/* Print Button - hidden during print */}
       <div className="flex justify-end mb-4 print:hidden">
-        <Button onClick={handlePrint} className="gap-2">
-          <Printer className="w-4 h-4" />
-          Download / Print Invoice
+        <Button onClick={handlePrint} variant="outline" size="sm" className="gap-2">
+          <Printer className="h-4 w-4" />
+          Print Invoice
         </Button>
       </div>
 
-      {/* Invoice document */}
-      <div
-        id="invoice-document"
-        className="bg-white text-gray-900 p-8 rounded-lg shadow-sm border border-gray-200 max-w-2xl mx-auto print:shadow-none print:border-none print:rounded-none print:max-w-full"
-      >
-        {/* Header */}
-        <div className="flex items-start justify-between mb-8 pb-6 border-b border-gray-200">
-          <div className="flex items-center gap-4">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
             <img
               src="/assets/generated/vitalist-logo.dim_320x80.png"
-              alt="Vitalist Water"
-              className="h-12 object-contain"
+              alt="Vitalist"
+              className="h-10 object-contain"
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = 'none';
               }}
             />
           </div>
-          <div className="text-right">
-            <h1 className="text-2xl font-bold text-blue-700">INVOICE</h1>
-            <p className="text-sm text-gray-500 mt-1">{invoiceNumber}</p>
-            <p className="text-sm text-gray-500">
-              {createdAt.toLocaleDateString('en-IN', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric',
-              })}
-            </p>
-            <p className="text-xs text-gray-400">
-              {createdAt.toLocaleTimeString('en-IN', {
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </p>
-          </div>
+          <p className="text-sm text-gray-500">Vitalist Distribution Pvt. Ltd.</p>
+          <p className="text-sm text-gray-500">GSTIN: 29ABCDE1234F1Z5</p>
         </div>
-
-        {/* From / To */}
-        <div className="grid grid-cols-2 gap-8 mb-8">
-          <div>
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">From</h3>
-            <p className="font-semibold text-gray-800">Vitalist Water</p>
-            <p className="text-sm text-gray-600">Enterprise Distribution</p>
-            <p className="text-sm text-gray-600">shajan@vitalist.com</p>
-          </div>
-          <div>
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Bill To</h3>
-            {store ? (
-              <>
-                <p className="font-semibold text-gray-800">{store.storeName}</p>
-                <p className="text-sm text-gray-600">{store.ownerName}</p>
-                <p className="text-sm text-gray-600">{store.mobileNumber}</p>
-                <p className="text-sm text-gray-600">{store.address}</p>
-                {store.landmark && (
-                  <p className="text-sm text-gray-500">Near: {store.landmark}</p>
-                )}
-              </>
-            ) : (
-              <p className="text-sm text-gray-500">Store #{order.storeId.toString()}</p>
-            )}
-          </div>
+        <div className="text-right">
+          <h2 className="text-2xl font-bold text-gray-800">INVOICE</h2>
+          <p className="text-sm text-gray-600 mt-1">
+            <span className="font-medium">Invoice No:</span> {order.orderId}
+          </p>
+          <p className="text-sm text-gray-600">
+            <span className="font-medium">Date:</span> {invoiceDate}
+          </p>
+          <p className="text-sm text-gray-600">
+            <span className="font-medium">Status:</span>{' '}
+            <span className="font-semibold text-primary">{order.status}</span>
+          </p>
         </div>
+      </div>
 
-        {/* Order Info */}
-        <div className="bg-blue-50 rounded-lg p-4 mb-6 grid grid-cols-2 gap-4">
-          <div>
-            <span className="text-xs text-gray-500 uppercase tracking-wider">Order ID</span>
-            <p className="font-mono font-semibold text-blue-700">{order.orderId}</p>
-          </div>
-          <div>
-            <span className="text-xs text-gray-500 uppercase tracking-wider">Status</span>
-            <p className="font-semibold text-gray-700">{order.status}</p>
-          </div>
+      <Separator className="mb-6" />
+
+      {/* Bill To */}
+      <div className="grid grid-cols-2 gap-6 mb-6">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Bill To
+          </h3>
+          {store ? (
+            <div className="text-sm space-y-1">
+              <p className="font-semibold text-gray-800">{store.storeName}</p>
+              <p className="text-gray-600">{store.ownerName}</p>
+              <p className="text-gray-600">{store.address}</p>
+              {store.landmark && (
+                <p className="text-gray-600">Near: {store.landmark}</p>
+              )}
+              <p className="text-gray-600">📞 {store.mobileNumber}</p>
+            </div>
+          ) : (
+            <div className="text-sm space-y-1">
+              <p className="text-gray-500 italic">Store ID: {String(order.storeId)}</p>
+              <p className="text-gray-400 text-xs">Store details not available</p>
+            </div>
+          )}
         </div>
+        <div>
+          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Ship To
+          </h3>
+          {store ? (
+            <div className="text-sm space-y-1">
+              <p className="font-semibold text-gray-800">{store.storeName}</p>
+              <p className="text-gray-600">{store.address}</p>
+              {store.latitude && store.longitude && (
+                <p className="text-gray-500 text-xs">
+                  GPS: {store.latitude.toFixed(4)}, {store.longitude.toFixed(4)}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="text-sm">
+              <p className="text-gray-400 text-xs">Delivery address not available</p>
+            </div>
+          )}
+        </div>
+      </div>
 
-        {/* Line Items Table */}
-        <table className="w-full mb-8">
+      {/* Line Items Table */}
+      <div className="mb-6">
+        <table className="w-full text-sm border-collapse">
           <thead>
-            <tr className="border-b-2 border-gray-200">
-              <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wider pb-3">
-                Description
-              </th>
-              <th className="text-right text-xs font-semibold text-gray-400 uppercase tracking-wider pb-3">
-                Qty
-              </th>
-              <th className="text-right text-xs font-semibold text-gray-400 uppercase tracking-wider pb-3">
-                Rate (₹)
-              </th>
-              <th className="text-right text-xs font-semibold text-gray-400 uppercase tracking-wider pb-3">
-                Amount (₹)
-              </th>
+            <tr className="bg-gray-100">
+              <th className="text-left p-3 border border-gray-200 font-semibold">#</th>
+              <th className="text-left p-3 border border-gray-200 font-semibold">Description</th>
+              <th className="text-right p-3 border border-gray-200 font-semibold">Qty</th>
+              <th className="text-right p-3 border border-gray-200 font-semibold">Rate (₹)</th>
+              <th className="text-right p-3 border border-gray-200 font-semibold">Amount (₹)</th>
             </tr>
           </thead>
           <tbody>
-            <tr className="border-b border-gray-100">
-              <td className="py-4">
-                <p className="font-medium text-gray-800">Vitalist Water Supply</p>
+            <tr>
+              <td className="p-3 border border-gray-200">1</td>
+              <td className="p-3 border border-gray-200">
+                <p className="font-medium">Product Order</p>
                 {order.notes && (
-                  <p className="text-sm text-gray-500 mt-1">{order.notes}</p>
+                  <p className="text-gray-500 text-xs mt-1">{order.notes}</p>
                 )}
               </td>
-              <td className="py-4 text-right font-medium">{order.quantity.toString()}</td>
-              <td className="py-4 text-right font-medium">₹{order.rate.toFixed(2)}</td>
-              <td className="py-4 text-right font-semibold">₹{total.toFixed(2)}</td>
+              <td className="p-3 border border-gray-200 text-right">{quantity}</td>
+              <td className="p-3 border border-gray-200 text-right">
+                ₹{rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </td>
+              <td className="p-3 border border-gray-200 text-right">
+                ₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </td>
             </tr>
           </tbody>
-          <tfoot>
-            <tr>
-              <td colSpan={3} className="pt-4 text-right font-semibold text-gray-700">
-                Total Amount:
-              </td>
-              <td className="pt-4 text-right text-xl font-bold text-blue-700">
-                ₹{total.toFixed(2)}
-              </td>
-            </tr>
-          </tfoot>
         </table>
+      </div>
 
-        {/* QR Code Section */}
-        <div className="border-t border-gray-200 pt-6 flex items-start gap-6">
-          <div className="flex-1">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-              QR Code
-            </h3>
-            {hasQR ? (
-              <div className="flex flex-col items-start gap-2">
-                <QRCodeDisplay orderId={order.qrCode!.value} size={100} />
-                <p className="text-xs text-gray-500">Scan to verify order</p>
-                {order.qrCode?.scanned && order.qrCode.scanTimestamp && (
-                  <p className="text-xs text-green-600">
-                    ✓ Scanned at{' '}
-                    {new Date(Number(order.qrCode.scanTimestamp) / 1_000_000).toLocaleString()}
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center justify-center w-24 h-24 bg-gray-100 rounded border-2 border-dashed border-gray-300">
-                <div className="text-center">
-                  <p className="text-xs text-gray-400 font-medium">Pending</p>
-                  <p className="text-xs text-gray-400">Approval</p>
-                </div>
-              </div>
-            )}
+      {/* Totals */}
+      <div className="flex justify-end mb-6">
+        <div className="w-64 space-y-2 text-sm">
+          <div className="flex justify-between">
+            <span className="text-gray-600">Subtotal</span>
+            <span>₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
           </div>
-          <div className="text-right text-xs text-gray-400">
-            <p>Vitalist Water Enterprise</p>
-            <p>Distribution Management System</p>
-            <p className="mt-1">Thank you for your business!</p>
+          <div className="flex justify-between">
+            <span className="text-gray-600">GST (18%)</span>
+            <span>₹{gst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <Separator />
+          <div className="flex justify-between font-bold text-base">
+            <span>Total</span>
+            <span>₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
           </div>
         </div>
       </div>
+
+      <Separator className="mb-6" />
+
+      {/* QR Code + Footer */}
+      <div className="flex items-start justify-between">
+        <div className="text-xs text-gray-500 max-w-xs">
+          <p className="font-semibold text-gray-700 mb-1">Terms & Conditions</p>
+          <p>Payment due within 30 days of invoice date.</p>
+          <p>Goods once sold will not be taken back.</p>
+          <p>Subject to local jurisdiction.</p>
+        </div>
+        <div className="text-center">
+          <p className="text-xs text-gray-500 mb-2 font-medium">Order QR Code</p>
+          {!qrError ? (
+            <img
+              src={qrImageUrl}
+              alt={`QR Code for ${order.orderId}`}
+              className="w-32 h-32 border border-gray-200 rounded"
+              onError={() => setQrError(true)}
+            />
+          ) : (
+            <div className="w-32 h-32 border border-gray-200 rounded flex items-center justify-center bg-gray-50">
+              <p className="text-xs text-gray-400 text-center px-2">QR unavailable</p>
+            </div>
+          )}
+          <p className="text-xs text-gray-400 mt-1">{order.orderId}</p>
+        </div>
+      </div>
+
+      <style>{`
+        @media print {
+          .print\\:hidden { display: none !important; }
+          body { background: white; }
+          .invoice-container { padding: 0; }
+        }
+      `}</style>
     </div>
   );
 }

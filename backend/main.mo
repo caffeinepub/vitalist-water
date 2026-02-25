@@ -15,8 +15,6 @@ import AccessControl "authorization/access-control";
 import Storage "blob-storage/Storage";
 import MixinStorage "blob-storage/Mixin";
 
-
-
 actor {
   public type AppUserRole = {
     #admin;
@@ -25,46 +23,20 @@ actor {
     #distributor;
   };
 
-  module AppUserRole {
-    public func compare(a : AppUserRole, b : AppUserRole) : Order.Order {
-      let rank = func(r : AppUserRole) : Nat {
-        switch (r) {
-          case (#admin) { 0 };
-          case (#staff) { 1 };
-          case (#delivery) { 2 };
-          case (#distributor) { 3 };
-        };
-      };
-      Nat.compare(rank(a), rank(b));
-    };
-  };
-
-  public type User = {
+  type User = {
     id : Text;
     email : Text;
     hashedPassword : Text;
     role : AppUserRole;
   };
 
-  module User {
-    public func compare(user1 : User, user2 : User) : Order.Order {
-      switch (AppUserRole.compare(user1.role, user2.role)) {
-        case (#equal) { Text.compare(user1.email, user2.email) };
-        case (order) { order };
-      };
-    };
-  };
-
-  public type UserProfile = {
+  type UserProfile = {
     name : Text;
     email : Text;
     role : Text;
   };
 
-  let users = Map.empty<Text, User>();
-  let userProfiles = Map.empty<Principal, UserProfile>();
-
-  public type Store = {
+  type Store = {
     storeName : Text;
     ownerName : Text;
     mobileNumber : Text;
@@ -75,27 +47,19 @@ actor {
     timestamp : Int;
   };
 
-  module Store {
-    public func compare(store1 : Store, store2 : Store) : Order.Order {
-      Int.compare(store1.timestamp, store2.timestamp);
-    };
-  };
-
-  let stores = Map.empty<Nat, Store>();
-
-  public type QRCodeData = {
+  type QRCodeData = {
     value : Text;
     scanned : Bool;
     scanTimestamp : ?Time.Time;
   };
 
-  public type GpsLocation = {
+  type GpsLocation = {
     latitude : Float;
     longitude : Float;
     timestamp : Int;
   };
 
-  public type OrderRecord = {
+  type OrderRecord = {
     orderId : Text;
     storeId : Nat;
     quantity : Nat;
@@ -110,17 +74,10 @@ actor {
     unloadedTruckImage : ?Blob;
     gpsLocation : ?GpsLocation;
     emptyTruckImage : ?Storage.ExternalBlob;
+    assignedDeliveryUser : ?Principal;
   };
 
-  module OrderRecord {
-    public func compare(order1 : OrderRecord, order2 : OrderRecord) : Order.Order {
-      Text.compare(order1.orderId, order2.orderId);
-    };
-  };
-
-  let orders = Map.empty<Text, OrderRecord>();
-
-  public type DistributorDelivery = {
+  type DistributorDelivery = {
     deliveryId : Text;
     orderId : Text;
     truckNumber : Text;
@@ -131,15 +88,12 @@ actor {
     notes : Text;
   };
 
-  module DistributorDelivery {
-    public func compare(delivery1 : DistributorDelivery, delivery2 : DistributorDelivery) : Order.Order {
-      Text.compare(delivery1.deliveryId, delivery2.deliveryId);
-    };
-  };
-
+  let users = Map.empty<Text, User>();
+  let userProfiles = Map.empty<Principal, UserProfile>();
+  let stores = Map.empty<Nat, Store>();
+  let orders = Map.empty<Text, OrderRecord>();
   let distributorDeliveries = Map.empty<Text, DistributorDelivery>();
-
-  var userIdCounter : Nat = 0;
+  var userIdCounter = 0;
 
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
@@ -152,12 +106,7 @@ actor {
 
   func isAdminByEmail(email : Text) : Bool {
     switch (users.get(email)) {
-      case (?user) {
-        switch (user.role) {
-          case (#admin) { true };
-          case (_) { false };
-        };
-      };
+      case (?user) { switch (user.role) { case (#admin) { true }; case (_) { false } } };
       case (null) { false };
     };
   };
@@ -171,56 +120,150 @@ actor {
 
   func isDistributorByEmail(email : Text) : Bool {
     switch (users.get(email)) {
-      case (?user) {
-        switch (user.role) {
-          case (#distributor) { true };
-          case (_) { false };
-        };
+      case (?user) { switch (user.role) { case (#distributor) { true }; case (_) { false } } };
+      case (null) { false };
+    };
+  };
+
+  func isDeliveryByEmail(email : Text) : Bool {
+    switch (users.get(email)) {
+      case (?user) { switch (user.role) { case (#delivery) { true }; case (_) { false } } };
+      case (null) { false };
+    };
+  };
+
+  func requireAdminAccess(caller : Principal, sessionEmail : Text) : () {
+    if (AccessControl.isAdmin(accessControlState, caller)) { return };
+    if (isAdminByEmail(sessionEmail)) { return };
+    Runtime.trap("Unauthorized: Only admins can perform this action");
+  };
+
+  func requireUserAccess(caller : Principal, sessionEmail : Text) : () {
+    if (AccessControl.hasPermission(accessControlState, caller, #user)) { return };
+    if (isKnownUser(sessionEmail)) { return };
+    Runtime.trap("Unauthorized: Only authenticated users can perform this action");
+  };
+
+  func requireDistributorOrAdminAccess(caller : Principal, sessionEmail : Text) : () {
+    if (AccessControl.isAdmin(accessControlState, caller)) { return };
+    if (isAdminByEmail(sessionEmail)) { return };
+    if (AccessControl.hasPermission(accessControlState, caller, #user)) { return };
+    if (isDistributorByEmail(sessionEmail)) { return };
+    Runtime.trap("Unauthorized: Only authenticated users can perform this action");
+  };
+
+  func isAssignedDeliveryUser(order : OrderRecord, caller : Principal, sessionEmail : Text) : Bool {
+    switch (order.assignedDeliveryUser) {
+      case (?assignedPrincipal) {
+        if (assignedPrincipal == caller) { return true };
+        if (isDeliveryByEmail(sessionEmail)) { return false };
+        false;
       };
       case (null) { false };
     };
   };
 
-  func requireAdminAccess(
-    caller : Principal,
-    sessionEmail : Text,
-  ) : () {
-    if (AccessControl.isAdmin(accessControlState, caller)) {
-      return;
-    };
-    if (isAdminByEmail(sessionEmail)) {
-      return;
-    };
-    Runtime.trap("Unauthorized: Only admins can perform this action");
+  public type CreateOrderInput = {
+    orderId : Text;
+    storeId : Nat;
+    quantity : Nat;
+    rate : Float;
+    notes : Text;
+    timestamp : Int;
+    invoicePDF : ?Blob;
   };
 
-  func requireUserAccess(caller : Principal, sessionEmail : Text) : () {
-    if (AccessControl.hasPermission(accessControlState, caller, #user)) {
-      return;
+  public shared ({ caller }) func createOrder(
+    input : CreateOrderInput,
+    sessionEmail : Text,
+  ) : async () {
+    requireUserAccess(caller, sessionEmail);
+    if (orders.containsKey(input.orderId)) {
+      Runtime.trap("Order ID already exists");
     };
-    if (isKnownUser(sessionEmail)) {
-      return;
+    let newOrder : OrderRecord = {
+      orderId = input.orderId;
+      storeId = input.storeId;
+      quantity = input.quantity;
+      rate = input.rate;
+      notes = input.notes;
+      status = "Pending Approval";
+      timestamp = input.timestamp;
+      qrCode = null;
+      invoicePDF = input.invoicePDF;
+      barcodeScan = null;
+      loadedTruckImage = null;
+      unloadedTruckImage = null;
+      gpsLocation = null;
+      emptyTruckImage = null;
+      assignedDeliveryUser = null;
     };
-    Runtime.trap("Unauthorized: Only authenticated users can perform this action");
+    orders.add(input.orderId, newOrder);
   };
 
-  func requireDistributorOrAdminAccess(
-    caller : Principal,
+  public shared ({ caller }) func assignDelivery(
+    orderId : Text,
+    deliveryUser : Principal,
     sessionEmail : Text,
-  ) : () {
-    if (AccessControl.isAdmin(accessControlState, caller)) {
-      return;
+  ) : async () {
+    requireAdminAccess(caller, sessionEmail);
+    switch (orders.get(orderId)) {
+      case (null) { Runtime.trap("Order does not exist") };
+      case (?order) {
+        let updatedOrder : OrderRecord = {
+          order with
+          assignedDeliveryUser = ?deliveryUser;
+          status = "Assigned to Delivery";
+          qrCode = ?{
+            value = orderId;
+            scanned = false;
+            scanTimestamp = null;
+          };
+        };
+        orders.add(orderId, updatedOrder);
+      };
     };
-    if (isAdminByEmail(sessionEmail)) {
-      return;
+  };
+
+  public query ({ caller }) func getAssignedOrdersForDeliveryUser(
+    deliveryUser : Principal,
+    sessionEmail : Text,
+  ) : async [OrderRecord] {
+    let callerIsAdmin = AccessControl.isAdmin(accessControlState, caller) or isAdminByEmail(sessionEmail);
+    let callerIsOwner = (caller == deliveryUser);
+    if (not callerIsAdmin and not callerIsOwner) {
+      Runtime.trap("Unauthorized: Only the delivery user themselves or an admin can view assigned orders");
     };
-    if (AccessControl.hasPermission(accessControlState, caller, #user)) {
-      return;
+    let filteredList = List.empty<OrderRecord>();
+    for (order in orders.values()) {
+      switch (order.assignedDeliveryUser) {
+        case (?userId) { if (userId == deliveryUser) { filteredList.add(order) } };
+        case (null) {};
+      };
     };
-    if (isDistributorByEmail(sessionEmail)) {
-      return;
+    filteredList.toArray();
+  };
+
+  public shared ({ caller }) func updateOrderStatusByDeliveryUser(
+    orderId : Text,
+    newStatus : Text,
+    sessionEmail : Text,
+  ) : async () {
+    switch (orders.get(orderId)) {
+      case (null) { Runtime.trap("Order does not exist") };
+      case (?order) {
+        let callerIsAdmin = AccessControl.isAdmin(accessControlState, caller) or isAdminByEmail(sessionEmail);
+        let callerIsAssigned = switch (order.assignedDeliveryUser) {
+          case (?assignedPrincipal) { assignedPrincipal == caller };
+          case (null) { false };
+        };
+        if (not callerIsAdmin and not callerIsAssigned) {
+          Runtime.trap("Unauthorized: Only the assigned delivery user or an admin can update the order status");
+        };
+        let updatedOrder : OrderRecord = { order with status = newStatus };
+        orders.add(orderId, updatedOrder);
+      };
     };
-    Runtime.trap("Unauthorized: Only authenticated users can perform this action");
   };
 
   do {
@@ -281,18 +324,13 @@ actor {
 
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap(
-        "Unauthorized: Only authenticated users can get their profile"
-      );
+      Runtime.trap("Unauthorized: Only authenticated users can get their profile");
     };
     userProfiles.get(caller);
   };
 
   public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
-    if (
-      caller != user
-      and not AccessControl.isAdmin(accessControlState, caller)
-    ) {
+    if (caller != user and not AccessControl.isAdmin(accessControlState, caller)) {
       Runtime.trap("Unauthorized: Can only view your own profile");
     };
     userProfiles.get(user);
@@ -378,66 +416,37 @@ actor {
           };
           let token = email # ":" # roleText # ":" # user.id;
           ?{ role = roleText; token = token };
-        } else {
-          null;
-        };
+        } else { null };
       };
       case (null) { null };
     };
   };
 
-  public shared ({ caller }) func addStore(
-    store : Store,
-    sessionEmail : Text,
-  ) : async () {
+  public shared ({ caller }) func addStore(store : Store, sessionEmail : Text) : async () {
     requireAdminAccess(caller, sessionEmail);
     let nextId = stores.size() + 1;
     stores.add(nextId, store);
   };
 
-  public shared ({ caller }) func updateStore(
-    id : Nat,
-    store : Store,
-    sessionEmail : Text,
-  ) : async () {
+  public shared ({ caller }) func updateStore(id : Nat, store : Store, sessionEmail : Text) : async () {
     requireAdminAccess(caller, sessionEmail);
     switch (stores.get(id)) {
       case (null) { Runtime.trap("Store does not exist") };
-      case (?_) {
-        stores.add(id, store);
-      };
+      case (?_) { stores.add(id, store) };
     };
   };
 
-  public shared ({ caller }) func deleteStore(
-    id : Nat,
-    sessionEmail : Text,
-  ) : async () {
+  public shared ({ caller }) func deleteStore(id : Nat, sessionEmail : Text) : async () {
     requireAdminAccess(caller, sessionEmail);
     switch (stores.get(id)) {
       case (null) { Runtime.trap("Store does not exist") };
-      case (?_) {
-        stores.remove(id);
-      };
+      case (?_) { stores.remove(id) };
     };
   };
 
-  public query ({ caller }) func getAllStores(
-    sessionEmail : Text,
-  ) : async [Store] {
+  public query ({ caller }) func getAllStores(sessionEmail : Text) : async [Store] {
     requireUserAccess(caller, sessionEmail);
-    stores.values().toArray().sort();
-  };
-
-  public shared ({ caller }) func createOrder(
-    order : OrderRecord,
-    sessionEmail : Text,
-  ) : async () {
-    requireUserAccess(caller, sessionEmail);
-    if (orders.containsKey(order.orderId)) {
-      Runtime.trap("Order ID already exists");
-    };
-    orders.add(order.orderId, order);
+    stores.values().toArray();
   };
 
   public shared ({ caller }) func updateOrder(
@@ -448,32 +457,23 @@ actor {
     requireAdminAccess(caller, sessionEmail);
     switch (orders.get(orderId)) {
       case (null) { Runtime.trap("Order does not exist") };
-      case (?_) {
-        orders.add(orderId, updatedOrder);
-      };
+      case (?_) { orders.add(orderId, updatedOrder) };
     };
   };
 
-  public query ({ caller }) func getOrder(
-    orderId : Text,
-    sessionEmail : Text,
-  ) : async ?OrderRecord {
+  public query ({ caller }) func getOrder(orderId : Text, sessionEmail : Text) : async ?OrderRecord {
     requireUserAccess(caller, sessionEmail);
     orders.get(orderId);
   };
 
-  public query ({ caller }) func getAllOrders(
-    sessionEmail : Text,
-  ) : async [OrderRecord] {
+  public query ({ caller }) func getAllOrders(sessionEmail : Text) : async [OrderRecord] {
     requireUserAccess(caller, sessionEmail);
-    orders.values().toArray().sort();
+    orders.values().toArray();
   };
 
-  public query ({ caller }) func getAllUsers(
-    sessionEmail : Text,
-  ) : async [User] {
+  public query ({ caller }) func getAllUsers(sessionEmail : Text) : async [User] {
     requireAdminAccess(caller, sessionEmail);
-    users.values().toArray().sort();
+    users.values().toArray();
   };
 
   public shared ({ caller }) func addUser(
@@ -503,22 +503,15 @@ actor {
     requireAdminAccess(caller, sessionEmail);
     switch (users.get(email)) {
       case (null) { Runtime.trap("User does not exist") };
-      case (?_) {
-        users.add(email, updatedUser);
-      };
+      case (?_) { users.add(email, updatedUser) };
     };
   };
 
-  public shared ({ caller }) func deleteUser(
-    email : Text,
-    sessionEmail : Text,
-  ) : async () {
+  public shared ({ caller }) func deleteUser(email : Text, sessionEmail : Text) : async () {
     requireAdminAccess(caller, sessionEmail);
     switch (users.get(email)) {
       case (null) { Runtime.trap("User does not exist") };
-      case (?_) {
-        users.remove(email);
-      };
+      case (?_) { users.remove(email) };
     };
   };
 
@@ -539,7 +532,6 @@ actor {
     sessionEmail : Text,
   ) : async () {
     let callerIsAdmin = AccessControl.isAdmin(accessControlState, caller) or isAdminByEmail(sessionEmail);
-
     switch (distributorDeliveries.get(deliveryId)) {
       case (null) { Runtime.trap("Distributor delivery does not exist") };
       case (?existing) {
@@ -559,9 +551,7 @@ actor {
     requireAdminAccess(caller, sessionEmail);
     switch (distributorDeliveries.get(deliveryId)) {
       case (null) { Runtime.trap("Distributor delivery does not exist") };
-      case (?_) {
-        distributorDeliveries.remove(deliveryId);
-      };
+      case (?_) { distributorDeliveries.remove(deliveryId) };
     };
   };
 
@@ -569,7 +559,7 @@ actor {
     sessionEmail : Text,
   ) : async [DistributorDelivery] {
     requireAdminAccess(caller, sessionEmail);
-    distributorDeliveries.values().toArray().sort();
+    distributorDeliveries.values().toArray();
   };
 
   public query ({ caller }) func getDistributorDeliveriesByUser(
@@ -584,9 +574,7 @@ actor {
     };
     let filteredList = List.empty<DistributorDelivery>();
     for (delivery in distributorDeliveries.values()) {
-      if (delivery.distributor == distributor) {
-        filteredList.add(delivery);
-      };
+      if (delivery.distributor == distributor) { filteredList.add(delivery) };
     };
     filteredList.toArray();
   };
@@ -598,17 +586,11 @@ actor {
     let callerIsAdmin = AccessControl.isAdmin(accessControlState, caller) or isAdminByEmail(sessionEmail);
     if (not callerIsAdmin) {
       switch (distributorDeliveries.get(deliveryId)) {
-        case (null) {
-          Runtime.trap(
-            "Unauthorized: Only admins or the assigned distributor can view this delivery"
-          );
-        };
+        case (null) { Runtime.trap("Unauthorized: Only admins or the assigned distributor can view this delivery") };
         case (?delivery) {
           let callerIsAssignedDistributor = (caller == delivery.distributor) or isDistributorByEmail(sessionEmail);
           if (not callerIsAssignedDistributor) {
-            Runtime.trap(
-              "Unauthorized: Only admins or the assigned distributor can view this delivery"
-            );
+            Runtime.trap("Unauthorized: Only admins or the assigned distributor can view this delivery");
           };
           return ?delivery;
         };
@@ -623,7 +605,6 @@ actor {
     sessionEmail : Text,
   ) : async () {
     requireAdminAccess(caller, sessionEmail);
-
     switch (orders.get(orderId)) {
       case (null) { Runtime.trap("Order does not exist") };
       case (?existingOrder) {
@@ -647,9 +628,7 @@ actor {
             scanned = false;
             scanTimestamp = null;
           };
-        } else {
-          null;
-        };
+        } else { null };
       };
     };
   };
@@ -682,21 +661,10 @@ actor {
         if (order.status == "Delivered") { deliveredToday += 1 };
       };
 
-      if (order.status == "Out for Delivery") {
-        activeDeliveries += 1;
-      };
-
-      if (order.status == "Trucks in Transit") {
-        trucksInTransit += 1;
-      };
-
-      if (order.status == "Pending Approval") {
-        pendingApproval += 1;
-      };
-
-      if (order.status == "Distributor Confirmations Pending") {
-        confirmationsPending += 1;
-      };
+      if (order.status == "Out for Delivery") { activeDeliveries += 1 };
+      if (order.status == "Trucks in Transit") { trucksInTransit += 1 };
+      if (order.status == "Pending Approval") { pendingApproval += 1 };
+      if (order.status == "Distributor Confirmations Pending") { confirmationsPending += 1 };
     };
 
     {
@@ -754,7 +722,6 @@ actor {
           switch (matchingDelivery) {
             case (?delivery) {
               let storeRecord = stores.get(order.storeId);
-
               let record = {
                 orderId = order.orderId;
                 storeName = order.orderId;
@@ -795,17 +762,11 @@ actor {
 
     let order = switch (orders.get(orderId)) {
       case (?o) { o };
-      case (null) {
-        Runtime.trap(
-          "Order not found. Cannot submit distributor confirmation."
-        );
-      };
+      case (null) { Runtime.trap("Order not found. Cannot submit distributor confirmation.") };
     };
 
     if (order.status != "Distributor Confirmations Pending") {
-      Runtime.trap(
-        "Order is not in the correct workflow stage for distributor confirmations."
-      );
+      Runtime.trap("Order is not in the correct workflow stage for distributor confirmations.");
     };
 
     let callerIsAdmin = AccessControl.isAdmin(accessControlState, caller) or isAdminByEmail(sessionEmail);
@@ -846,9 +807,7 @@ actor {
 
     let order = switch (orders.get(orderId)) {
       case (?o) { o };
-      case (null) {
-        Runtime.trap("Order not found. Cannot update order status using QR.");
-      };
+      case (null) { Runtime.trap("Order not found. Cannot update order status using QR.") };
     };
 
     switch (order.qrCode) {
@@ -894,20 +853,10 @@ actor {
     sessionEmail : Text,
   ) : async [OrderRecord] {
     requireUserAccess(caller, sessionEmail);
-
-    let filteredOrders = orders.values().toArray().filter(
-      func(_order) {
-        _order.status == status;
-      }
-    );
-
-    filteredOrders;
+    orders.values().toArray().filter(func(_order) { _order.status == status });
   };
 
-  public query ({ caller }) func getOrderWithImages(
-    orderId : Text,
-    sessionEmail : Text,
-  ) : async ?OrderRecord {
+  public query ({ caller }) func getOrderWithImages(orderId : Text, sessionEmail : Text) : async ?OrderRecord {
     requireUserAccess(caller, sessionEmail);
     orders.get(orderId);
   };
@@ -924,11 +873,7 @@ actor {
       case (null) { Runtime.trap("Order does not exist") };
       case (?order) {
         let updatedOrder : OrderRecord = {
-          order with gpsLocation = ?{
-            latitude;
-            longitude;
-            timestamp = Time.now();
-          };
+          order with gpsLocation = ?{ latitude; longitude; timestamp = Time.now() };
         };
         orders.add(orderId, updatedOrder);
       };

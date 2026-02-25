@@ -4,179 +4,214 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { CheckCircle, AlertCircle, Upload, QrCode } from 'lucide-react';
 import BarcodeScanStep from './BarcodeScanStep';
-import ImageUploadStep from './ImageUploadStep';
-import { CheckCircle2, Loader2 } from 'lucide-react';
-import { useSubmitDistributorConfirmation } from '@/hooks/useQueries';
-import { useAuth } from '@/contexts/AuthContext';
+import { useSubmitDistributorConfirmation } from '../../hooks/useQueries';
+import { useAuth } from '../../contexts/AuthContext';
+import type { OrderRecord } from '../../backend';
 
 interface DistributorWorkflowDialogProps {
-  orderId: string;
   open: boolean;
+  order: OrderRecord | null;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess?: () => void;
 }
 
-type Step = 'barcode' | 'images' | 'confirm' | 'done';
+type Step = 'scan' | 'upload' | 'confirm' | 'done';
 
 export default function DistributorWorkflowDialog({
-  orderId,
   open,
+  order,
   onClose,
   onSuccess,
 }: DistributorWorkflowDialogProps) {
-  const { user } = useAuth();
-  const sessionEmail = user?.email ?? '';
+  const { sessionEmail } = useAuth();
 
-  const [step, setStep] = useState<Step>('barcode');
-  const [barcodeData, setBarcodeData] = useState<string>('');
-  const [loadedImage, setLoadedImage] = useState<Uint8Array | null>(null);
-  const [unloadedImage, setUnloadedImage] = useState<Uint8Array | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string>('');
+  const [step, setStep] = useState<Step>('scan');
+  const [scannedValue, setScannedValue] = useState<string>('');
+  const [loadedTruckFile, setLoadedTruckFile] = useState<File | null>(null);
+  const [unloadedTruckFile, setUnloadedTruckFile] = useState<File | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const submitMutation = useSubmitDistributorConfirmation();
 
-  const stepLabels: Record<Step, string> = {
-    barcode: 'Step 1 of 3 — Scan Barcode',
-    images: 'Step 2 of 3 — Upload Images',
-    confirm: 'Step 3 of 3 — Confirm Submission',
-    done: 'Delivery Confirmed!',
+  const handleBarcodeScanned = (value: string) => {
+    setError(null);
+
+    // Verify the scanned value matches the order
+    if (order && value !== order.orderId) {
+      setError(`Scanned barcode "${value}" does not match order "${order?.orderId}". Please scan the correct QR code.`);
+      return;
+    }
+
+    setScannedValue(value);
+    setStep('upload');
   };
 
-  const handleBarcodeSuccess = (data: string) => {
-    setBarcodeData(data);
-    setStep('images');
+  const handleLoadedTruckChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) setLoadedTruckFile(file);
   };
 
-  const handleImagesComplete = (loaded: Uint8Array, unloaded: Uint8Array) => {
-    setLoadedImage(loaded);
-    setUnloadedImage(unloaded);
-    setStep('confirm');
+  const handleUnloadedTruckChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) setUnloadedTruckFile(file);
   };
 
   const handleSubmit = async () => {
-    if (!loadedImage || !unloadedImage) return;
-    setErrorMsg('');
+    if (!order || !loadedTruckFile || !unloadedTruckFile) {
+      setError('Please upload both truck images before submitting.');
+      return;
+    }
+
+    setError(null);
+
     try {
+      const loadedBytes = new Uint8Array(await loadedTruckFile.arrayBuffer());
+      const unloadedBytes = new Uint8Array(await unloadedTruckFile.arrayBuffer());
+
       await submitMutation.mutateAsync({
-        orderId,
-        barcodeScan: barcodeData,
-        loadedTruckImage: loadedImage,
-        unloadedTruckImage: unloadedImage,
+        orderId: order.orderId,
+        barcodeScan: scannedValue,
+        loadedTruckImage: loadedBytes,
+        unloadedTruckImage: unloadedBytes,
         sessionEmail,
       });
+
       setStep('done');
-      setTimeout(() => {
-        onSuccess();
-        onClose();
-      }, 2000);
+      onSuccess?.();
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Submission failed. Please try again.');
+      const message = err instanceof Error ? err.message : 'Submission failed';
+      setError(message);
     }
   };
 
   const handleClose = () => {
-    if (step !== 'done') {
-      setStep('barcode');
-      setBarcodeData('');
-      setLoadedImage(null);
-      setUnloadedImage(null);
-      setErrorMsg('');
-    }
+    setStep('scan');
+    setScannedValue('');
+    setLoadedTruckFile(null);
+    setUnloadedTruckFile(null);
+    setError(null);
     onClose();
   };
 
+  const getStepTitle = () => {
+    switch (step) {
+      case 'scan': return 'Step 1: Scan Order QR Code';
+      case 'upload': return 'Step 2: Upload Truck Images';
+      case 'confirm': return 'Step 3: Confirm Submission';
+      case 'done': return 'Delivery Confirmed!';
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
+    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Delivery Confirmation</DialogTitle>
-          <DialogDescription>{stepLabels[step]}</DialogDescription>
+          <DialogTitle>{getStepTitle()}</DialogTitle>
         </DialogHeader>
 
-        {/* Progress indicator */}
-        {step !== 'done' && (
-          <div className="flex gap-2 mb-2">
-            {(['barcode', 'images', 'confirm'] as Step[]).map((s, idx) => (
-              <div
-                key={s}
-                className={`h-1.5 flex-1 rounded-full transition-all ${
-                  step === s
-                    ? 'bg-primary'
-                    : ['barcode', 'images', 'confirm'].indexOf(step) > idx
-                    ? 'bg-primary/60'
-                    : 'bg-muted'
-                }`}
-              />
-            ))}
-          </div>
-        )}
+        <div className="space-y-4">
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
-        {step === 'barcode' && (
-          <BarcodeScanStep onBarcodeScanned={handleBarcodeSuccess} />
-        )}
+          {/* Step: Scan */}
+          {step === 'scan' && order && (
+            <BarcodeScanStep
+              onBarcodeScanned={handleBarcodeScanned}
+              expectedOrderId={order.orderId}
+            />
+          )}
 
-        {step === 'images' && (
-          <ImageUploadStep onComplete={handleImagesComplete} />
-        )}
-
-        {step === 'confirm' && (
-          <div className="flex flex-col gap-4">
-            <div className="bg-muted/30 rounded-lg p-4 space-y-2">
-              <div>
-                <span className="text-xs text-muted-foreground">Order ID</span>
-                <p className="font-mono font-semibold">{orderId}</p>
+          {/* Step: Upload */}
+          {step === 'upload' && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 rounded p-3">
+                <CheckCircle className="h-4 w-4" />
+                <span>QR Code scanned: <span className="font-mono font-medium">{scannedValue}</span></span>
               </div>
-              <div>
-                <span className="text-xs text-muted-foreground">Barcode Scanned</span>
-                <p className="font-mono text-sm truncate">{barcodeData}</p>
-              </div>
-              <div>
-                <span className="text-xs text-muted-foreground">Images</span>
-                <p className="text-sm text-green-600">✓ Loaded &amp; Unloaded images ready</p>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="text-sm font-medium block mb-1">
+                    <Upload className="h-4 w-4 inline mr-1" />
+                    Loaded Truck Image *
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLoadedTruckChange}
+                    className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                  />
+                  {loadedTruckFile && (
+                    <p className="text-xs text-green-600 mt-1">✓ {loadedTruckFile.name}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium block mb-1">
+                    <Upload className="h-4 w-4 inline mr-1" />
+                    Unloaded Truck Image *
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleUnloadedTruckChange}
+                    className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                  />
+                  {unloadedTruckFile && (
+                    <p className="text-xs text-green-600 mt-1">✓ {unloadedTruckFile.name}</p>
+                  )}
+                </div>
               </div>
             </div>
+          )}
 
-            {errorMsg && (
-              <div className="bg-destructive/10 text-destructive text-sm rounded-lg p-3">
-                {errorMsg}
-              </div>
-            )}
+          {/* Step: Done */}
+          {step === 'done' && (
+            <div className="text-center py-6">
+              <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-foreground">Delivery Confirmed!</h3>
+              <p className="text-muted-foreground text-sm mt-2">
+                Order {order?.orderId} has been marked as delivered.
+              </p>
+            </div>
+          )}
+        </div>
 
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStep('images')} className="flex-1">
+        <DialogFooter>
+          {step === 'scan' && (
+            <Button variant="outline" onClick={handleClose}>
+              Cancel
+            </Button>
+          )}
+          {step === 'upload' && (
+            <>
+              <Button variant="outline" onClick={() => setStep('scan')}>
                 Back
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={submitMutation.isPending}
-                className="flex-1"
+                disabled={!loadedTruckFile || !unloadedTruckFile || submitMutation.isPending}
               >
-                {submitMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Submitting...
-                  </>
-                ) : (
-                  'Submit Confirmation'
-                )}
+                {submitMutation.isPending ? 'Submitting...' : 'Submit Confirmation'}
               </Button>
-            </div>
-          </div>
-        )}
-
-        {step === 'done' && (
-          <div className="flex flex-col items-center gap-4 py-8">
-            <CheckCircle2 className="w-16 h-16 text-green-500" />
-            <h3 className="text-xl font-bold text-green-600">Delivery Confirmed!</h3>
-            <p className="text-muted-foreground text-center">
-              Order {orderId} has been marked as delivered and is now permanently locked.
-            </p>
-          </div>
-        )}
+            </>
+          )}
+          {step === 'done' && (
+            <Button onClick={handleClose}>
+              Close
+            </Button>
+          )}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

@@ -1,63 +1,75 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Printer } from 'lucide-react';
+import { generateQRCodeURL } from '../../utils/qrGenerator';
 
 interface QRPrintViewProps {
   orderId: string;
-  qrCodeValue: string;
-  onClose?: () => void;
+  qrCodeValue?: string;
 }
 
-export default function QRPrintView({ orderId, qrCodeValue, onClose }: QRPrintViewProps) {
-  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrCodeValue)}`;
+export default function QRPrintView({ orderId, qrCodeValue }: QRPrintViewProps) {
+  const [imgError, setImgError] = useState(false);
+
+  // Use the stored qrCode value if provided, otherwise use orderId
+  const valueToEncode = qrCodeValue ?? orderId;
+  const qrUrl = generateQRCodeURL(valueToEncode, 250);
 
   const handlePrint = () => {
     window.print();
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-white p-8">
-      <style>{`
-        @media print {
-          .no-print { display: none !important; }
-          body { margin: 0; padding: 0; }
-          .print-content { 
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-          }
-        }
-      `}</style>
-      <div className="print-content flex flex-col items-center gap-6">
-        <h1 className="text-2xl font-bold text-gray-900 no-print">QR Code Print Preview</h1>
-        <div className="border-4 border-gray-800 p-6 rounded-lg bg-white shadow-lg">
+    <div className="flex flex-col items-center gap-4 p-4">
+      <div className="print:block">
+        <div className="flex flex-col items-center gap-3 p-6 border border-gray-200 rounded-lg bg-white">
           <img
-            src={qrImageUrl}
-            alt={`QR Code for Order ${orderId}`}
-            className="w-64 h-64"
+            src="/assets/generated/vitalist-logo.dim_320x80.png"
+            alt="Vitalist"
+            className="h-8 object-contain"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
           />
-          <div className="mt-4 text-center">
-            <p className="text-sm text-gray-600 font-medium">Order ID</p>
-            <p className="text-xl font-bold text-gray-900 font-mono">{orderId}</p>
+          <p className="text-sm font-semibold text-gray-700">Order QR Code</p>
+
+          {!imgError ? (
+            <img
+              src={qrUrl}
+              alt={`QR Code for ${orderId}`}
+              className="w-48 h-48 border border-gray-200"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <div className="w-48 h-48 border border-gray-200 flex items-center justify-center bg-gray-50 rounded">
+              <p className="text-xs text-gray-400 text-center px-4">
+                QR code could not be loaded
+              </p>
+            </div>
+          )}
+
+          <div className="text-center">
+            <p className="text-xs text-gray-500 font-mono">{orderId}</p>
           </div>
         </div>
-        <div className="no-print flex gap-4 mt-4">
-          <button
-            onClick={handlePrint}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
-          >
-            Print QR Code
-          </button>
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-medium"
-            >
-              Close
-            </button>
-          )}
-        </div>
       </div>
+
+      <Button
+        onClick={handlePrint}
+        variant="outline"
+        size="sm"
+        className="gap-2 print:hidden"
+      >
+        <Printer className="h-4 w-4" />
+        Print QR Code
+      </Button>
+
+      <style>{`
+        @media print {
+          .print\\:hidden { display: none !important; }
+          body * { visibility: hidden; }
+          .print\\:block, .print\\:block * { visibility: visible; }
+          .print\\:block { position: absolute; left: 0; top: 0; }
+        }
+      `}</style>
     </div>
   );
 }

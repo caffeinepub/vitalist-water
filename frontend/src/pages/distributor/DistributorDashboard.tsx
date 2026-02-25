@@ -1,183 +1,183 @@
 import React, { useState } from 'react';
-import { useDistributorDeliveriesByUser, useAllOrders, useAllStores } from '@/hooks/useQueries';
-import { useAuth } from '@/contexts/AuthContext';
+import { Package, Truck, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
+import DistributorWorkflowDialog from '../../components/distributor/DistributorWorkflowDialog';
 import {
-  Truck,
-  MapPin,
-  Phone,
-  Clock,
-  CheckCircle2,
-  Lock,
-  Package,
-} from 'lucide-react';
-import { isOrderLocked } from '@/utils/orderUtils';
-import DistributorWorkflowDialog from '@/components/distributor/DistributorWorkflowDialog';
+  useDistributorDeliveriesByUser,
+  useAllOrders,
+  useAllStores,
+} from '../../hooks/useQueries';
+import { useAuth } from '../../contexts/AuthContext';
+import { useInternetIdentity } from '../../hooks/useInternetIdentity';
+import { getStatusColor } from '../../utils/orderUtils';
+import type { OrderRecord } from '../../backend';
+import { Principal } from '@dfinity/principal';
 
 export default function DistributorDashboard() {
-  const { user } = useAuth();
-  const sessionEmail = user?.email ?? '';
+  const { sessionEmail } = useAuth();
+  const { identity } = useInternetIdentity();
 
-  // For distributors, we pass null as principal (session-based auth)
-  const { data: deliveries, isLoading: deliveriesLoading } = useDistributorDeliveriesByUser(null, sessionEmail);
-  const { data: orders, isLoading: ordersLoading } = useAllOrders(sessionEmail);
+  const [workflowOrder, setWorkflowOrder] = useState<OrderRecord | null>(null);
+
+  const distributorPrincipal: Principal | null = React.useMemo(() => {
+    if (!identity) return null;
+    try {
+      return identity.getPrincipal();
+    } catch {
+      return null;
+    }
+  }, [identity]);
+
+  const { data: deliveries, isLoading: deliveriesLoading } = useDistributorDeliveriesByUser(
+    distributorPrincipal,
+    sessionEmail
+  );
+
+  const { data: orders, isLoading: ordersLoading, refetch: refetchOrders } = useAllOrders(sessionEmail);
   const { data: stores } = useAllStores(sessionEmail);
 
-  const [workflowOrderId, setWorkflowOrderId] = useState<string | null>(null);
-  const [workflowDeliveryId, setWorkflowDeliveryId] = useState<string | null>(null);
+  const myOrders = React.useMemo(() => {
+    if (!orders || !deliveries) return [];
+    const myOrderIds = new Set(deliveries.map((d) => d.orderId));
+    return orders.filter((o) => myOrderIds.has(o.orderId));
+  }, [orders, deliveries]);
+
+  const pendingConfirmationOrders = React.useMemo(() => {
+    return myOrders.filter((o) => o.status === 'Distributor Confirmations Pending');
+  }, [myOrders]);
+
+  const getStoreName = (storeId: bigint): string => {
+    if (!stores) return `Store #${String(storeId)}`;
+    const idx = Number(storeId) - 1;
+    return stores[idx]?.storeName ?? `Store #${String(storeId)}`;
+  };
 
   const isLoading = deliveriesLoading || ordersLoading;
-
-  const getOrder = (orderId: string) => orders?.find((o) => o.orderId === orderId);
-  const getStore = (storeId: bigint) => {
-    const id = Number(storeId);
-    return stores?.[id - 1];
-  };
-
-  const handleMarkArrived = (orderId: string, deliveryId: string) => {
-    setWorkflowOrderId(orderId);
-    setWorkflowDeliveryId(deliveryId);
-  };
-
-  const handleWorkflowSuccess = () => {
-    setWorkflowOrderId(null);
-    setWorkflowDeliveryId(null);
-  };
 
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">My Deliveries</h1>
+        <h1 className="text-2xl font-bold text-foreground">Distributor Dashboard</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Track and confirm your assigned deliveries
+          Manage your delivery confirmations
         </p>
       </div>
 
-      {isLoading ? (
-        <div className="grid gap-4">
-          {[1, 2].map((i) => <Skeleton key={i} className="h-48 w-full" />)}
+      {!identity && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Please log in to view your distributor assignments.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {isLoading && (
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <Card key={i}>
+              <CardContent className="p-4">
+                <Skeleton className="h-6 w-48 mb-2" />
+                <Skeleton className="h-4 w-full" />
+              </CardContent>
+            </Card>
+          ))}
         </div>
-      ) : !deliveries || deliveries.length === 0 ? (
+      )}
+
+      {/* Pending Confirmations */}
+      {!isLoading && pendingConfirmationOrders.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Clock className="h-5 w-5 text-amber-600" />
+            Pending Confirmations ({pendingConfirmationOrders.length})
+          </h2>
+          {pendingConfirmationOrders.map((order) => (
+            <Card key={order.orderId} className="border-l-4 border-l-amber-500">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <p className="font-mono font-medium">{order.orderId}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {getStoreName(order.storeId)} | Qty: {String(order.quantity)}
+                    </p>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${getStatusColor(order.status)}`}
+                    >
+                      {order.status}
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => setWorkflowOrder(order)}
+                    className="gap-2"
+                  >
+                    <CheckCircle className="h-4 w-4" />
+                    Confirm Delivery
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* All My Orders */}
+      {!isLoading && myOrders.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Package className="h-5 w-5 text-primary" />
+            My Orders ({myOrders.length})
+          </h2>
+          {myOrders.map((order) => (
+            <Card key={order.orderId}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <p className="font-mono font-medium">{order.orderId}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {getStoreName(order.storeId)} | Qty: {String(order.quantity)} | ₹{order.rate}
+                    </p>
+                  </div>
+                  <Badge
+                    variant={order.status === 'Delivered' ? 'outline' : 'secondary'}
+                    className={order.status === 'Delivered' ? 'text-green-600 border-green-200' : ''}
+                  >
+                    {order.status}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {!isLoading && myOrders.length === 0 && identity && (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16 gap-4">
-            <Package className="w-12 h-12 text-muted-foreground" />
-            <p className="text-muted-foreground">No deliveries assigned to you yet.</p>
+          <CardContent className="p-8 text-center">
+            <Truck className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+            <p className="text-muted-foreground font-medium">No orders assigned</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Orders assigned to you will appear here.
+            </p>
           </CardContent>
         </Card>
-      ) : (
-        <div className="grid gap-4">
-          {deliveries.map((delivery) => {
-            const order = getOrder(delivery.orderId);
-            const store = order ? getStore(order.storeId) : null;
-            const locked = order ? isOrderLocked(order.status) : false;
-            const canMarkArrived =
-              order?.status === 'Trucks in Transit' ||
-              order?.status === 'Out for Delivery';
-            const isDelivered = order?.status === 'Delivered';
-            const isPending = order?.status === 'Distributor Confirmations Pending';
-
-            const eta = new Date(Number(delivery.estimatedDeliveryTime) / 1_000_000);
-
-            return (
-              <Card key={delivery.deliveryId} className={locked ? 'opacity-80' : ''}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle className="text-base font-mono">{delivery.orderId}</CardTitle>
-                      {store && (
-                        <p className="text-sm text-muted-foreground mt-1">{store.storeName}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {isDelivered && (
-                        <Badge className="bg-green-600 gap-1">
-                          <Lock className="w-3 h-3" />
-                          Delivered
-                        </Badge>
-                      )}
-                      {isPending && (
-                        <Badge variant="secondary" className="gap-1">
-                          Confirmation Pending
-                        </Badge>
-                      )}
-                      {!isDelivered && !isPending && order && (
-                        <Badge variant="outline">{order.status}</Badge>
-                      )}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Delivery details */}
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="flex items-center gap-2">
-                      <Truck className="w-4 h-4 text-muted-foreground shrink-0" />
-                      <span className="font-medium">{delivery.truckNumber}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
-                      <span>{delivery.driverContact}</span>
-                    </div>
-                    <div className="flex items-center gap-2 col-span-2">
-                      <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
-                      <span>Driver: {delivery.driverName}</span>
-                    </div>
-                    <div className="flex items-center gap-2 col-span-2">
-                      <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
-                      <span>
-                        ETA:{' '}
-                        {isNaN(eta.getTime())
-                          ? 'Not set'
-                          : eta.toLocaleDateString() + ' ' + eta.toLocaleTimeString()}
-                      </span>
-                    </div>
-                  </div>
-
-                  {delivery.notes && (
-                    <p className="text-sm text-muted-foreground bg-muted/30 rounded p-2">
-                      {delivery.notes}
-                    </p>
-                  )}
-
-                  {/* Actions */}
-                  {isDelivered ? (
-                    <div className="flex items-center gap-2 text-green-600 text-sm font-medium">
-                      <CheckCircle2 className="w-4 h-4" />
-                      Delivery confirmed and locked
-                    </div>
-                  ) : canMarkArrived || isPending ? (
-                    <Button
-                      className="w-full"
-                      onClick={() => handleMarkArrived(delivery.orderId, delivery.deliveryId)}
-                    >
-                      {isPending ? 'Complete Confirmation' : 'Mark Truck Arrived & Confirm'}
-                    </Button>
-                  ) : (
-                    <div className="text-sm text-muted-foreground text-center py-2">
-                      Waiting for order to reach delivery stage...
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
       )}
 
       {/* Distributor Workflow Dialog */}
-      {workflowOrderId && (
-        <DistributorWorkflowDialog
-          orderId={workflowOrderId}
-          open={!!workflowOrderId}
-          onClose={() => {
-            setWorkflowOrderId(null);
-            setWorkflowDeliveryId(null);
-          }}
-          onSuccess={handleWorkflowSuccess}
-        />
-      )}
+      <DistributorWorkflowDialog
+        open={!!workflowOrder}
+        order={workflowOrder}
+        onClose={() => setWorkflowOrder(null)}
+        onSuccess={() => {
+          setWorkflowOrder(null);
+          refetchOrders();
+        }}
+      />
     </div>
   );
 }

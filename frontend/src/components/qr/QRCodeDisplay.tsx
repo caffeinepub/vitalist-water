@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { getQRImageUrl } from '../../utils/qrGenerator';
+import { generateQRCodeURL } from '../../utils/qrGenerator';
 
 interface QRCodeDisplayProps {
   orderId: string;
@@ -7,46 +7,42 @@ interface QRCodeDisplayProps {
   className?: string;
 }
 
-export default function QRCodeDisplay({ orderId, size = 160, className = '' }: QRCodeDisplayProps) {
+export default function QRCodeDisplay({ orderId, size = 200, className = '' }: QRCodeDisplayProps) {
   const [imgError, setImgError] = useState(false);
 
   if (!orderId) {
     return (
-      <div className={`inline-flex flex-col items-center gap-2 ${className}`}>
-        <div
-          className="p-3 bg-white rounded-xl border border-border shadow-xs flex items-center justify-center text-xs text-muted-foreground"
-          style={{ width: size + 24, height: size + 24 }}
-        >
-          No QR data
-        </div>
+      <div
+        className={`flex items-center justify-center bg-gray-100 border border-gray-200 rounded text-gray-400 text-xs ${className}`}
+        style={{ width: size, height: size }}
+      >
+        No Order ID
       </div>
     );
   }
 
-  const url = getQRImageUrl(orderId, size);
+  const qrUrl = generateQRCodeURL(orderId, size);
+
+  if (imgError) {
+    return (
+      <div
+        className={`flex flex-col items-center justify-center bg-gray-100 border border-gray-200 rounded text-gray-400 text-xs p-2 ${className}`}
+        style={{ width: size, height: size }}
+      >
+        <span>QR unavailable</span>
+        <span className="mt-1 text-center break-all">{orderId}</span>
+      </div>
+    );
+  }
 
   return (
-    <div className={`inline-flex flex-col items-center gap-2 ${className}`}>
-      <div className="p-3 bg-white rounded-xl border border-border shadow-xs">
-        {imgError ? (
-          <div
-            className="flex items-center justify-center text-xs text-muted-foreground font-mono break-all text-center"
-            style={{ width: size, height: size }}
-          >
-            {orderId}
-          </div>
-        ) : (
-          <img
-            src={url}
-            alt={`QR Code for ${orderId}`}
-            width={size}
-            height={size}
-            className="block"
-            onError={() => setImgError(true)}
-          />
-        )}
-      </div>
-      <p className="text-xs font-mono text-muted-foreground">{orderId}</p>
-    </div>
+    <img
+      src={qrUrl}
+      alt={`QR Code for order ${orderId}`}
+      width={size}
+      height={size}
+      className={`border border-gray-200 rounded ${className}`}
+      onError={() => setImgError(true)}
+    />
   );
 }

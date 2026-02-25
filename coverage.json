@@ -1,110 +1,113 @@
 {
   "kind": "coverage_report",
   "version": "1.0",
-  "generatedAt": "2026-02-25T11:47:44.762Z",
+  "generatedAt": "2026-02-25T12:38:24.590Z",
   "sources": {
     "buildRequest": true,
     "implementationPlan": true
   },
   "requirements": {
-    "total": 3,
-    "implemented": 3,
+    "total": 4,
+    "implemented": 4,
     "items": [
       {
         "id": "REQ-1",
-        "summary": "Diagnose and fix the blank page issue that occurs after deployment. Audit App.tsx for runtime errors including undefined variable access, failed imports, missing null guards on authentication state, and role-based routing logic that may throw before rendering. Ensure the app renders a visible UI for all authentication states (unauthenticated, loading, authenticated with any role).",
+        "summary": "Fix invoice generation so that when an order's QR code is scanned or when the invoice modal is opened, the invoice is correctly fetched and rendered with all order details, store info, line items, and the QR code. Trace the full call path from InvoiceModal → InvoiceView → backend queries and ensure the order ID lookup, store lookup, and data assembly succeed without errors. Add defensive null/undefined checks for all fields rendered in InvoiceView.",
         "status": "implemented",
         "plannedFiles": [
-          "frontend/src/App.tsx",
-          "frontend/src/contexts/AuthContext.tsx",
-          "frontend/src/pages/LoginPage.tsx",
-          "frontend/src/pages/Dashboard.tsx",
-          "frontend/src/pages/admin/OrderManagementPage.tsx",
-          "frontend/src/pages/admin/StoreManagementPage.tsx",
-          "frontend/src/pages/admin/UserManagementPage.tsx",
-          "frontend/src/pages/staff/OrderCreationPage.tsx",
-          "frontend/src/pages/delivery/DeliveryDashboard.tsx",
-          "frontend/src/pages/distributor/DistributorDashboard.tsx"
+          "frontend/src/components/orders/InvoiceModal.tsx",
+          "frontend/src/components/orders/InvoiceView.tsx",
+          "frontend/src/hooks/useQueries.ts"
         ],
         "matchedFiles": [
-          "frontend/src/App.tsx",
-          "frontend/src/contexts/AuthContext.tsx",
-          "frontend/src/pages/LoginPage.tsx",
-          "frontend/src/pages/Dashboard.tsx",
-          "frontend/src/pages/admin/OrderManagementPage.tsx",
-          "frontend/src/pages/admin/StoreManagementPage.tsx",
-          "frontend/src/pages/admin/UserManagementPage.tsx",
-          "frontend/src/pages/staff/OrderCreationPage.tsx",
-          "frontend/src/pages/distributor/DistributorDashboard.tsx"
+          "frontend/src/components/orders/InvoiceModal.tsx",
+          "frontend/src/components/orders/InvoiceView.tsx",
+          "frontend/src/hooks/useQueries.ts"
         ]
       },
       {
         "id": "REQ-2",
-        "summary": "Add a top-level error boundary component wrapping the entire React application in App.tsx to catch and display any unhandled render errors with a user-friendly fallback UI instead of a blank page. The fallback should show the app name and a message indicating an error occurred with a reload button.",
+        "summary": "Fix the delivery assignment flow so that after an admin assigns an order to a delivery user (sets assignedDeliveryUser on the order), that order immediately appears in the DeliveryDashboard for the assigned delivery user. Audit the backend assignOrder / updateOrder logic to confirm assignedDeliveryUser is persisted correctly. Audit useQueries.ts to confirm the delivery dashboard query filters orders by the logged-in user's principal/ID against assignedDeliveryUser. Fix any mismatch between how the assignment is stored and how it is queried.",
         "status": "implemented",
         "plannedFiles": [
-          "frontend/src/components/ErrorBoundary.tsx",
-          "frontend/src/App.tsx"
+          "frontend/src/pages/delivery/DeliveryDashboard.tsx",
+          "frontend/src/hooks/useQueries.ts",
+          "frontend/src/pages/admin/OrderManagementPage.tsx"
         ],
         "matchedFiles": [
-          "frontend/src/components/ErrorBoundary.tsx",
-          "frontend/src/App.tsx"
+          "frontend/src/pages/delivery/DeliveryDashboard.tsx",
+          "frontend/src/hooks/useQueries.ts",
+          "frontend/src/pages/admin/OrderManagementPage.tsx"
         ]
       },
       {
         "id": "REQ-3",
-        "summary": "Audit all lazy-loaded or dynamically imported components (maps, Leaflet, QR scanner, camera) for missing Suspense boundaries or import failures that could cause a blank render. Wrap all such components with React.Suspense and appropriate loading fallbacks.",
+        "summary": "Fix the end-to-end QR scan flow across all role-based pipeline stages (admin, staff, delivery) in ScanPage and DeliveryDashboard. Ensure that: (1) the QRScanModal camera activates reliably, (2) the scanned value is correctly decoded using the VITALIST-prefix logic in qrGenerator.ts / orderUtils.ts, (3) the decoded order ID is matched to a real order in the backend, and (4) the appropriate status transition mutation is called and confirmed. Handle cases where the scanned QR value does not match any order by showing a clear error message.",
         "status": "implemented",
         "plannedFiles": [
-          "frontend/src/components/map/SatelliteMapView.tsx",
           "frontend/src/components/qr/QRScanModal.tsx",
-          "frontend/src/components/distributor/BarcodeScanStep.tsx",
-          "frontend/src/pages/admin/LiveTrackingPage.tsx",
-          "frontend/src/pages/admin/StoreManagementPage.tsx",
-          "frontend/src/pages/admin/DeliveryVerificationPage.tsx",
+          "frontend/src/pages/ScanPage.tsx",
           "frontend/src/pages/delivery/DeliveryDashboard.tsx",
-          "frontend/src/pages/staff/OrderCreationPage.tsx",
-          "frontend/src/pages/ScanPage.tsx"
+          "frontend/src/components/distributor/BarcodeScanStep.tsx",
+          "frontend/src/utils/orderUtils.ts",
+          "frontend/src/components/distributor/DistributorWorkflowDialog.tsx"
         ],
         "matchedFiles": [
-          "frontend/src/components/map/SatelliteMapView.tsx",
           "frontend/src/components/qr/QRScanModal.tsx",
+          "frontend/src/pages/ScanPage.tsx",
+          "frontend/src/pages/delivery/DeliveryDashboard.tsx",
           "frontend/src/components/distributor/BarcodeScanStep.tsx",
-          "frontend/src/pages/admin/StoreManagementPage.tsx",
-          "frontend/src/pages/staff/OrderCreationPage.tsx",
-          "frontend/src/pages/ScanPage.tsx"
+          "frontend/src/utils/orderUtils.ts",
+          "frontend/src/components/distributor/DistributorWorkflowDialog.tsx"
+        ]
+      },
+      {
+        "id": "REQ-4",
+        "summary": "Audit and fix the QRPrintView and QRCodeDisplay components to ensure the QR code image URL is generated correctly using qrGenerator.ts (with the VITALIST-prefixed, base64-encoded order ID) and that the image loads without CORS or URL encoding errors. Verify the QR code printed/displayed encodes exactly the value the scan decoder expects.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/components/qr/QRCodeDisplay.tsx",
+          "frontend/src/components/orders/QRPrintView.tsx",
+          "frontend/src/utils/qrGenerator.ts",
+          "frontend/src/components/orders/InvoiceView.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/components/qr/QRCodeDisplay.tsx",
+          "frontend/src/components/orders/QRPrintView.tsx",
+          "frontend/src/utils/qrGenerator.ts",
+          "frontend/src/components/orders/InvoiceView.tsx"
         ]
       }
     ]
   },
   "changedFiles": [
+    "backend/main.mo",
     "build-request.json",
     "feature_evidence.json",
     "frontend-file-summaries.txt",
     "frontend-implementation-plan.json",
     "frontend/src/App.tsx",
-    "frontend/src/components/ErrorBoundary.tsx",
+    "frontend/src/components/delivery/EmptyTruckImageUpload.tsx",
     "frontend/src/components/distributor/BarcodeScanStep.tsx",
     "frontend/src/components/distributor/DistributorWorkflowDialog.tsx",
-    "frontend/src/components/layout/AppSidebar.tsx",
     "frontend/src/components/layout/Layout.tsx",
-    "frontend/src/components/map/SatelliteMapView.tsx",
     "frontend/src/components/orders/InvoiceModal.tsx",
+    "frontend/src/components/orders/InvoiceView.tsx",
+    "frontend/src/components/orders/QRPrintView.tsx",
+    "frontend/src/components/orders/WorkflowStageIndicator.tsx",
+    "frontend/src/components/qr/QRCodeDisplay.tsx",
     "frontend/src/components/qr/QRScanModal.tsx",
     "frontend/src/contexts/AuthContext.tsx",
     "frontend/src/hooks/useQueries.ts",
     "frontend/src/pages/Dashboard.tsx",
-    "frontend/src/pages/LoginPage.tsx",
     "frontend/src/pages/ScanPage.tsx",
-    "frontend/src/pages/SettingsPage.tsx",
     "frontend/src/pages/admin/DistributorDeliveryManagementPage.tsx",
     "frontend/src/pages/admin/OrderManagementPage.tsx",
-    "frontend/src/pages/admin/QRManagementPage.tsx",
-    "frontend/src/pages/admin/ReportsPage.tsx",
-    "frontend/src/pages/admin/StoreManagementPage.tsx",
-    "frontend/src/pages/admin/UserManagementPage.tsx",
+    "frontend/src/pages/delivery/DeliveryDashboard.tsx",
     "frontend/src/pages/distributor/DistributorDashboard.tsx",
     "frontend/src/pages/staff/OrderCreationPage.tsx",
+    "frontend/src/utils/orderUtils.ts",
+    "frontend/src/utils/qrGenerator.ts",
     "project_state.json",
     "scratch/component-selection.json",
     "spec.md",

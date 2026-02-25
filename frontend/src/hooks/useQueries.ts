@@ -1,16 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useActor } from './useActor';
-import type { OrderRecord, Store, User, DistributorDelivery, AppUserRole } from '../backend';
+import type { OrderRecord, Store, User, DistributorDelivery, CreateOrderInput, AppUserRole } from '../backend';
+import { Principal } from '@dfinity/principal';
 
-// ─── Type exports ────────────────────────────────────────────────────────────
+export type { AppUserRole };
 
 export type AddUserInput = {
   email: string;
   hashedPassword: string;
   role: AppUserRole;
 };
-
-// ─── Role mapping helpers ─────────────────────────────────────────────────────
 
 export function mapBackendRoleToAppRole(role: AppUserRole): string {
   switch (role) {
@@ -32,31 +31,42 @@ export function mapAppRoleToBackendRole(role: string): AppUserRole {
   }
 }
 
-// ─── Orders ──────────────────────────────────────────────────────────────────
+// ─── Orders ───────────────────────────────────────────────────────────────────
 
 export function useAllOrders(sessionEmail: string) {
-  const { actor, isFetching } = useActor();
+  const { actor, isFetching: actorFetching } = useActor();
+
   return useQuery<OrderRecord[]>({
     queryKey: ['orders', sessionEmail],
     queryFn: async () => {
       if (!actor) return [];
-      try {
-        return await actor.getAllOrders(sessionEmail);
-      } catch {
-        return [];
-      }
+      return actor.getAllOrders(sessionEmail);
     },
-    enabled: !!actor && !isFetching && !!sessionEmail,
+    enabled: !!actor && !actorFetching && !!sessionEmail,
+  });
+}
+
+export function useGetOrder(orderId: string | null, sessionEmail: string) {
+  const { actor, isFetching: actorFetching } = useActor();
+
+  return useQuery<OrderRecord | null>({
+    queryKey: ['order', orderId, sessionEmail],
+    queryFn: async () => {
+      if (!actor || !orderId) return null;
+      return actor.getOrder(orderId, sessionEmail);
+    },
+    enabled: !!actor && !actorFetching && !!orderId && !!sessionEmail,
   });
 }
 
 export function useCreateOrder() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
+
   return useMutation({
-    mutationFn: async ({ order, sessionEmail }: { order: OrderRecord; sessionEmail: string }) => {
+    mutationFn: async ({ input, sessionEmail }: { input: CreateOrderInput; sessionEmail: string }) => {
       if (!actor) throw new Error('Actor not available');
-      return actor.createOrder(order, sessionEmail);
+      return actor.createOrder(input, sessionEmail);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
@@ -67,6 +77,7 @@ export function useCreateOrder() {
 export function useUpdateOrder() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async ({
       orderId,
@@ -82,6 +93,8 @@ export function useUpdateOrder() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['order'] });
+      queryClient.invalidateQueries({ queryKey: ['assignedOrders'] });
     },
   });
 }
@@ -89,6 +102,7 @@ export function useUpdateOrder() {
 export function useApproveOrder() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async ({
       orderId,
@@ -104,6 +118,8 @@ export function useApproveOrder() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['order'] });
+      queryClient.invalidateQueries({ queryKey: ['assignedOrders'] });
     },
   });
 }
@@ -111,6 +127,7 @@ export function useApproveOrder() {
 export function useUpdateOrderStatusUsingQR() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async ({
       orderId,
@@ -126,93 +143,105 @@ export function useUpdateOrderStatusUsingQR() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['order'] });
+      queryClient.invalidateQueries({ queryKey: ['assignedOrders'] });
     },
   });
 }
 
-export function useFilterOrdersByStatus(status: string, sessionEmail: string) {
-  const { actor, isFetching } = useActor();
+export function useAssignDelivery() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      orderId,
+      deliveryUser,
+      sessionEmail,
+    }: {
+      orderId: string;
+      deliveryUser: Principal;
+      sessionEmail: string;
+    }) => {
+      if (!actor) throw new Error('Actor not available');
+      return actor.assignDelivery(orderId, deliveryUser, sessionEmail);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['order'] });
+      queryClient.invalidateQueries({ queryKey: ['assignedOrders'] });
+    },
+  });
+}
+
+export function useUpdateOrderStatusByDeliveryUser() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      orderId,
+      newStatus,
+      sessionEmail,
+    }: {
+      orderId: string;
+      newStatus: string;
+      sessionEmail: string;
+    }) => {
+      if (!actor) throw new Error('Actor not available');
+      return actor.updateOrderStatusByDeliveryUser(orderId, newStatus, sessionEmail);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['order'] });
+      queryClient.invalidateQueries({ queryKey: ['assignedOrders'] });
+    },
+  });
+}
+
+// ─── Assigned Orders for Delivery ─────────────────────────────────────────────
+
+export function useGetAssignedOrdersForDeliveryUser(
+  deliveryUserPrincipal: Principal | null,
+  sessionEmail: string
+) {
+  const { actor, isFetching: actorFetching } = useActor();
+
   return useQuery<OrderRecord[]>({
-    queryKey: ['orders', 'status', status, sessionEmail],
+    queryKey: ['assignedOrders', deliveryUserPrincipal?.toString(), sessionEmail],
     queryFn: async () => {
-      if (!actor) return [];
+      if (!actor || !deliveryUserPrincipal) return [];
       try {
-        return await actor.filterOrdersByStatus(status, sessionEmail);
-      } catch {
+        return await actor.getAssignedOrdersForDeliveryUser(deliveryUserPrincipal, sessionEmail);
+      } catch (err) {
+        console.error('Error fetching assigned orders:', err);
         return [];
       }
     },
-    enabled: !!actor && !isFetching && !!sessionEmail && !!status,
-  });
-}
-
-export function useAddGpsLocation() {
-  const { actor } = useActor();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      orderId,
-      latitude,
-      longitude,
-      sessionEmail,
-    }: {
-      orderId: string;
-      latitude: number;
-      longitude: number;
-      sessionEmail: string;
-    }) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.addGpsLocation(orderId, latitude, longitude, sessionEmail);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-    },
-  });
-}
-
-export function useAddEmptyTruckImage() {
-  const { actor } = useActor();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      orderId,
-      file,
-      sessionEmail,
-    }: {
-      orderId: string;
-      file: import('../backend').ExternalBlob;
-      sessionEmail: string;
-    }) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.addEmptyTruckImage(orderId, file, sessionEmail);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-    },
+    enabled: !!actor && !actorFetching && !!deliveryUserPrincipal && !!sessionEmail,
+    refetchInterval: 15000,
   });
 }
 
 // ─── Stores ───────────────────────────────────────────────────────────────────
 
 export function useAllStores(sessionEmail: string) {
-  const { actor, isFetching } = useActor();
+  const { actor, isFetching: actorFetching } = useActor();
+
   return useQuery<Store[]>({
     queryKey: ['stores', sessionEmail],
     queryFn: async () => {
       if (!actor) return [];
-      try {
-        return await actor.getAllStores(sessionEmail);
-      } catch {
-        return [];
-      }
+      return actor.getAllStores(sessionEmail);
     },
-    enabled: !!actor && !isFetching && !!sessionEmail,
+    enabled: !!actor && !actorFetching && !!sessionEmail,
   });
 }
 
 export function useAddStore() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async ({ store, sessionEmail }: { store: Store; sessionEmail: string }) => {
       if (!actor) throw new Error('Actor not available');
@@ -227,6 +256,7 @@ export function useAddStore() {
 export function useUpdateStore() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async ({
       id,
@@ -249,6 +279,7 @@ export function useUpdateStore() {
 export function useDeleteStore() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async ({ id, sessionEmail }: { id: bigint; sessionEmail: string }) => {
       if (!actor) throw new Error('Actor not available');
@@ -263,24 +294,22 @@ export function useDeleteStore() {
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 export function useAllUsers(sessionEmail: string) {
-  const { actor, isFetching } = useActor();
+  const { actor, isFetching: actorFetching } = useActor();
+
   return useQuery<User[]>({
     queryKey: ['users', sessionEmail],
     queryFn: async () => {
       if (!actor) return [];
-      try {
-        return await actor.getAllUsers(sessionEmail);
-      } catch {
-        return [];
-      }
+      return actor.getAllUsers(sessionEmail);
     },
-    enabled: !!actor && !isFetching && !!sessionEmail,
+    enabled: !!actor && !actorFetching && !!sessionEmail,
   });
 }
 
 export function useAddUser() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async ({
       userInput,
@@ -301,6 +330,7 @@ export function useAddUser() {
 export function useUpdateUser() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async ({
       email,
@@ -323,6 +353,7 @@ export function useUpdateUser() {
 export function useDeleteUser() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async ({ email, sessionEmail }: { email: string; sessionEmail: string }) => {
       if (!actor) throw new Error('Actor not available');
@@ -337,43 +368,38 @@ export function useDeleteUser() {
 // ─── Distributor Deliveries ───────────────────────────────────────────────────
 
 export function useAllDistributorDeliveries(sessionEmail: string) {
-  const { actor, isFetching } = useActor();
+  const { actor, isFetching: actorFetching } = useActor();
+
   return useQuery<DistributorDelivery[]>({
     queryKey: ['distributorDeliveries', sessionEmail],
     queryFn: async () => {
       if (!actor) return [];
-      try {
-        return await actor.getAllDistributorDeliveries(sessionEmail);
-      } catch {
-        return [];
-      }
+      return actor.getAllDistributorDeliveries(sessionEmail);
     },
-    enabled: !!actor && !isFetching && !!sessionEmail,
+    enabled: !!actor && !actorFetching && !!sessionEmail,
   });
 }
 
 export function useDistributorDeliveriesByUser(
-  distributor: import('@dfinity/principal').Principal | null,
-  sessionEmail: string,
+  distributor: Principal | null,
+  sessionEmail: string
 ) {
-  const { actor, isFetching } = useActor();
+  const { actor, isFetching: actorFetching } = useActor();
+
   return useQuery<DistributorDelivery[]>({
-    queryKey: ['distributorDeliveries', 'user', distributor?.toString(), sessionEmail],
+    queryKey: ['distributorDeliveriesByUser', distributor?.toString(), sessionEmail],
     queryFn: async () => {
       if (!actor || !distributor) return [];
-      try {
-        return await actor.getDistributorDeliveriesByUser(distributor, sessionEmail);
-      } catch {
-        return [];
-      }
+      return actor.getDistributorDeliveriesByUser(distributor, sessionEmail);
     },
-    enabled: !!actor && !isFetching && !!distributor && !!sessionEmail,
+    enabled: !!actor && !actorFetching && !!distributor && !!sessionEmail,
   });
 }
 
 export function useCreateDistributorDelivery() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async ({
       delivery,
@@ -394,6 +420,7 @@ export function useCreateDistributorDelivery() {
 export function useUpdateDistributorDelivery() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async ({
       deliveryId,
@@ -416,6 +443,7 @@ export function useUpdateDistributorDelivery() {
 export function useDeleteDistributorDelivery() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async ({
       deliveryId,
@@ -433,69 +461,42 @@ export function useDeleteDistributorDelivery() {
   });
 }
 
-// ─── Admin Dashboard Stats ────────────────────────────────────────────────────
+// ─── Dashboard Stats ──────────────────────────────────────────────────────────
 
-export function useAdminDashboardStats(sessionEmail: string, enabled = true) {
-  const { actor, isFetching } = useActor();
-  return useQuery<{
-    activeDeliveries: bigint;
-    pendingApproval: bigint;
-    deliveredToday: bigint;
-    confirmationsPending: bigint;
-    totalOrdersToday: bigint;
-    trucksInTransit: bigint;
-  }>({
-    queryKey: ['adminStats', sessionEmail],
+export function useAdminDashboardStats(sessionEmail: string) {
+  const { actor, isFetching: actorFetching } = useActor();
+
+  return useQuery({
+    queryKey: ['adminDashboardStats', sessionEmail],
     queryFn: async () => {
       if (!actor) throw new Error('Actor not available');
       return actor.getAdminDashboardStats(sessionEmail);
     },
-    enabled: !!actor && !isFetching && !!sessionEmail && enabled,
+    enabled: !!actor && !actorFetching && !!sessionEmail,
   });
 }
 
 // ─── Delivery Verification ────────────────────────────────────────────────────
 
 export function useDeliveryVerificationRecords(sessionEmail: string) {
-  const { actor, isFetching } = useActor();
+  const { actor, isFetching: actorFetching } = useActor();
+
   return useQuery({
-    queryKey: ['deliveryVerification', sessionEmail],
+    queryKey: ['deliveryVerificationRecords', sessionEmail],
     queryFn: async () => {
-      if (!actor) return [];
-      try {
-        return await actor.getDeliveryVerificationRecords(sessionEmail);
-      } catch {
-        return [];
-      }
+      if (!actor) throw new Error('Actor not available');
+      return actor.getDeliveryVerificationRecords(sessionEmail);
     },
-    enabled: !!actor && !isFetching && !!sessionEmail,
+    enabled: !!actor && !actorFetching && !!sessionEmail,
   });
 }
 
-// ─── Live Tracking ────────────────────────────────────────────────────────────
-
-export function useLiveTrackingData(sessionEmail: string) {
-  const { actor, isFetching } = useActor();
-  return useQuery({
-    queryKey: ['liveTracking', sessionEmail],
-    queryFn: async () => {
-      if (!actor) return [];
-      try {
-        return await actor.getLiveTrackingData(sessionEmail);
-      } catch {
-        return [];
-      }
-    },
-    enabled: !!actor && !isFetching && !!sessionEmail,
-    refetchInterval: 30_000,
-  });
-}
-
-// ─── Distributor Confirmation ─────────────────────────────────────────────────
+// ─── Submit Distributor Confirmation ─────────────────────────────────────────
 
 export function useSubmitDistributorConfirmation() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async ({
       orderId,
@@ -516,12 +517,80 @@ export function useSubmitDistributorConfirmation() {
         barcodeScan,
         loadedTruckImage,
         unloadedTruckImage,
-        sessionEmail,
+        sessionEmail
       );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['distributorDeliveries'] });
     },
+  });
+}
+
+// ─── GPS Location ─────────────────────────────────────────────────────────────
+
+export function useAddGpsLocation() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      orderId,
+      latitude,
+      longitude,
+      sessionEmail,
+    }: {
+      orderId: string;
+      latitude: number;
+      longitude: number;
+      sessionEmail: string;
+    }) => {
+      if (!actor) throw new Error('Actor not available');
+      return actor.addGpsLocation(orderId, latitude, longitude, sessionEmail);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+}
+
+// ─── Empty Truck Image ────────────────────────────────────────────────────────
+
+export function useAddEmptyTruckImage() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      orderId,
+      file,
+      sessionEmail,
+    }: {
+      orderId: string;
+      file: import('../backend').ExternalBlob;
+      sessionEmail: string;
+    }) => {
+      if (!actor) throw new Error('Actor not available');
+      return actor.addEmptyTruckImage(orderId, file, sessionEmail);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+}
+
+// ─── Live Tracking ────────────────────────────────────────────────────────────
+
+export function useLiveTrackingData(sessionEmail: string) {
+  const { actor, isFetching: actorFetching } = useActor();
+
+  return useQuery({
+    queryKey: ['liveTrackingData', sessionEmail],
+    queryFn: async () => {
+      if (!actor) throw new Error('Actor not available');
+      return actor.getLiveTrackingData(sessionEmail);
+    },
+    enabled: !!actor && !actorFetching && !!sessionEmail,
+    refetchInterval: 30000,
   });
 }

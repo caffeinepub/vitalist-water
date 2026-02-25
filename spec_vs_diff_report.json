@@ -1,48 +1,60 @@
 {
   "kind": "spec_vs_diff_report",
   "version": "1.0",
-  "generatedAt": "2026-02-25T11:47:44.759Z",
-  "summary": "The diff implements all three requirements. REQ-1 is addressed by refactoring App.tsx with null guards, role-based routing safety (isPage validator, getDefaultPageForRole), loading states, and graceful actor initialization handling. REQ-2 is fulfilled by the new ErrorBoundary component with app name, error message, and reload button, wrapping app content in App.tsx. REQ-3 is partially addressed by lazy-loading pages in App.tsx with Suspense/PageLoader fallbacks, and SatelliteMapView is lazy-loaded with Suspense in StoreManagementPage. However, QRScanModal and BarcodeScanStep are not lazy-loaded with Suspense boundaries — they are imported directly.",
+  "generatedAt": "2026-02-25T12:38:24.587Z",
+  "summary": "The diff implements substantial fixes across all four requirements. REQ-1 (invoice generation), REQ-2 (delivery assignment), REQ-3 (QR scan flow), and REQ-4 (QR code display/print) all have corresponding changes. However, a few specific acceptance criteria have partial or unclear coverage, and one notable gap exists in how QRCodeDisplay generates its URL.",
   "missing_requirements": [
     {
-      "id": "REQ-3",
-      "requirement": "All dynamically imported components (SatelliteMapView, QRScanModal, BarcodeScanStep) have Suspense boundaries with loading indicators",
-      "reason": "QRScanModal and BarcodeScanStep are not lazy-loaded via React.lazy with Suspense boundaries. They are imported statically in ScanPage.tsx and DistributorWorkflowDialog.tsx respectively. Only SatelliteMapView has the lazy+Suspense pattern applied.",
+      "requirement": "QRCodeDisplay must generate the QR image URL using the VITALIST-prefix + base64-encoded order ID format so that a scanned QR from QRCodeDisplay resolves correctly to the backend order",
+      "reason": "QRCodeDisplay.tsx calls generateQRCodeURL(orderId, size) passing the raw orderId directly, without using the stored qrCode.value as InvoiceView does with 'order.qrCode?.value ?? order.orderId'. There is no evidence the component uses the stored QR value, meaning a displayed QR may encode a different value than what the decoder expects.",
       "evidence": [
-        "frontend/src/pages/ScanPage.tsx",
+        "frontend/src/components/qr/QRCodeDisplay.tsx"
+      ]
+    },
+    {
+      "requirement": "REQ-3 AC: The DistributorWorkflowDialog barcode scan step correctly resolves the scanned order and proceeds to the image upload step when the decoded value matches the order",
+      "reason": "DistributorWorkflowDialog.tsx checks if the decoded value !== order.orderId after BarcodeScanStep already calls decodeQRData. If the stored orderId does not match the decoded output of decodeQRData (e.g. raw vs prefixed format), this comparison would incorrectly reject valid scans. The diff does not definitively resolve this potential mismatch.",
+      "evidence": [
         "frontend/src/components/distributor/DistributorWorkflowDialog.tsx",
-        "frontend/src/components/qr/QRScanModal.tsx",
         "frontend/src/components/distributor/BarcodeScanStep.tsx"
       ]
     }
   ],
-  "hallucinated_features": [],
-  "confidence": 0.82,
+  "hallucinated_features": [
+    {
+      "description": "WorkflowStageIndicator component with WORKFLOW_STAGES progress UI",
+      "reason": "The build request does not mention adding or modifying a WorkflowStageIndicator component or a workflow stage progress bar UI. This appears to be an unrequested UI addition not covered by any requirement.",
+      "evidence": [
+        "frontend/src/components/orders/WorkflowStageIndicator.tsx"
+      ]
+    }
+  ],
+  "confidence": 0.72,
   "changed_files": [
+    "backend/main.mo",
     "frontend-file-summaries.txt",
     "frontend/src/App.tsx",
-    "frontend/src/components/ErrorBoundary.tsx",
+    "frontend/src/components/delivery/EmptyTruckImageUpload.tsx",
     "frontend/src/components/distributor/BarcodeScanStep.tsx",
     "frontend/src/components/distributor/DistributorWorkflowDialog.tsx",
-    "frontend/src/components/layout/AppSidebar.tsx",
     "frontend/src/components/layout/Layout.tsx",
-    "frontend/src/components/map/SatelliteMapView.tsx",
     "frontend/src/components/orders/InvoiceModal.tsx",
+    "frontend/src/components/orders/InvoiceView.tsx",
+    "frontend/src/components/orders/QRPrintView.tsx",
+    "frontend/src/components/orders/WorkflowStageIndicator.tsx",
+    "frontend/src/components/qr/QRCodeDisplay.tsx",
     "frontend/src/components/qr/QRScanModal.tsx",
     "frontend/src/contexts/AuthContext.tsx",
     "frontend/src/hooks/useQueries.ts",
     "frontend/src/pages/Dashboard.tsx",
-    "frontend/src/pages/LoginPage.tsx",
     "frontend/src/pages/ScanPage.tsx",
-    "frontend/src/pages/SettingsPage.tsx",
     "frontend/src/pages/admin/DistributorDeliveryManagementPage.tsx",
     "frontend/src/pages/admin/OrderManagementPage.tsx",
-    "frontend/src/pages/admin/QRManagementPage.tsx",
-    "frontend/src/pages/admin/ReportsPage.tsx",
-    "frontend/src/pages/admin/StoreManagementPage.tsx",
-    "frontend/src/pages/admin/UserManagementPage.tsx",
+    "frontend/src/pages/delivery/DeliveryDashboard.tsx",
     "frontend/src/pages/distributor/DistributorDashboard.tsx",
     "frontend/src/pages/staff/OrderCreationPage.tsx",
+    "frontend/src/utils/orderUtils.ts",
+    "frontend/src/utils/qrGenerator.ts",
     "project_state.json"
   ]
 }

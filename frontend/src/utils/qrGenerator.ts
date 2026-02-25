@@ -1,20 +1,39 @@
-// Simple QR code generator using a data URL approach
-// Generates a QR code SVG string for a given value
+/**
+ * QR code generation utilities.
+ * Uses the goqr.me API to generate QR code images.
+ * The encoded value uses VITALIST prefix + base64 order ID to match the decoder in orderUtils.ts.
+ */
 
-// Reed-Solomon and QR matrix generation - minimal implementation
-// We'll use a simple approach: encode as a data URL using a canvas-based method
-
-export function generateQRCodeDataURL(value: string, size = 200): string {
-  // Use a simple QR code generation via Google Charts API as fallback
-  // This is a client-side only approach
-  const encoded = encodeURIComponent(value);
-  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encoded}&format=svg`;
+/**
+ * Encodes an order ID into the QR code value format:
+ * "VITALIST:" + base64(orderId)
+ */
+export function encodeOrderIdForQR(orderId: string): string {
+  try {
+    const encoded = btoa(unescape(encodeURIComponent(orderId)));
+    return `VITALIST:${encoded}`;
+  } catch {
+    return `VITALIST:${orderId}`;
+  }
 }
 
-// Generate QR as SVG string using a simple matrix approach
-// For offline use, we implement a basic QR code renderer
-export function getQRImageUrl(orderId: string, size = 200): string {
-  const qrData = btoa(`VITALIST:${orderId}`);
-  const encoded = encodeURIComponent(qrData);
-  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encoded}&format=svg&color=1e3a8a`;
+/**
+ * Generates a QR code image URL for the given order ID.
+ * The QR code encodes: "VITALIST:" + base64(orderId)
+ */
+export function generateQRCodeURL(orderId: string, size: number = 200): string {
+  if (!orderId) return '';
+  const qrValue = encodeOrderIdForQR(orderId);
+  const encodedValue = encodeURIComponent(qrValue);
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodedValue}&format=png&margin=10`;
+}
+
+/**
+ * Generates a QR code image URL from a raw QR value (already encoded).
+ * Use this when you already have the full VITALIST:... value.
+ */
+export function generateQRCodeURLFromValue(qrValue: string, size: number = 200): string {
+  if (!qrValue) return '';
+  const encodedValue = encodeURIComponent(qrValue);
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodedValue}&format=png&margin=10`;
 }

@@ -1,150 +1,180 @@
-import React, { useState, useRef } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import React, { useState } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Upload, Camera, X, CheckCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Upload, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { ExternalBlob } from '../../backend';
-import { Progress } from '@/components/ui/progress';
+import { useAddEmptyTruckImage } from '../../hooks/useQueries';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface EmptyTruckImageUploadProps {
-  orderId: string;
   open: boolean;
+  orderId: string;
   onClose: () => void;
-  onUpload: (orderId: string, blob: ExternalBlob) => Promise<void>;
+  onUpload?: (orderId: string, blob: ExternalBlob) => Promise<void>;
 }
 
-export default function EmptyTruckImageUpload({ orderId, open, onClose, onUpload }: EmptyTruckImageUploadProps) {
+export default function EmptyTruckImageUpload({
+  open,
+  orderId,
+  onClose,
+  onUpload,
+}: EmptyTruckImageUploadProps) {
+  const { sessionEmail } = useAuth();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploaded, setUploaded] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [success, setSuccess] = useState(false);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const addEmptyTruckImageMutation = useAddEmptyTruckImage();
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    setSelectedFile(file);
-    setPreviewUrl(URL.createObjectURL(file));
-    setError(null);
-    setUploaded(false);
+    if (file) {
+      setSelectedFile(file);
+      setError(null);
+    }
   };
 
   const handleUpload = async () => {
     if (!selectedFile) {
-      setError('Please select an image first.');
+      setError('Please select an image file.');
       return;
     }
-    setUploading(true);
+
+    setIsUploading(true);
     setError(null);
+    setUploadProgress(0);
+
     try {
-      const arrayBuffer = await selectedFile.arrayBuffer();
-      const bytes = new Uint8Array(arrayBuffer);
+      const bytes = new Uint8Array(await selectedFile.arrayBuffer());
       const blob = ExternalBlob.fromBytes(bytes).withUploadProgress((pct) => {
         setUploadProgress(pct);
       });
-      await onUpload(orderId, blob);
-      setUploaded(true);
+
+      if (onUpload) {
+        await onUpload(orderId, blob);
+      } else {
+        await addEmptyTruckImageMutation.mutateAsync({
+          orderId,
+          file: blob,
+          sessionEmail,
+        });
+      }
+
+      setSuccess(true);
       setTimeout(() => {
+        setSuccess(false);
+        setSelectedFile(null);
+        setUploadProgress(0);
         onClose();
       }, 1500);
-    } catch (err: any) {
-      setError(err?.message || 'Upload failed. Please try again.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Upload failed';
+      setError(message);
     } finally {
-      setUploading(false);
+      setIsUploading(false);
     }
   };
 
   const handleClose = () => {
-    if (!uploading) {
+    if (!isUploading) {
       setSelectedFile(null);
-      setPreviewUrl(null);
-      setUploadProgress(0);
-      setUploaded(false);
       setError(null);
+      setSuccess(false);
+      setUploadProgress(0);
       onClose();
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Camera className="w-5 h-5 text-primary" />
-            Upload Empty Truck Image
-          </DialogTitle>
-          <DialogDescription>
-            Please upload a photo of the empty truck for Order <strong>{orderId}</strong> to complete delivery verification.
-          </DialogDescription>
+          <DialogTitle>Upload Empty Truck Image</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
-          {!previewUrl ? (
-            <div
-              className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:border-primary transition-colors"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
-              <p className="text-sm text-muted-foreground">Click to select an image</p>
-              <p className="text-xs text-muted-foreground mt-1">JPG, PNG, WEBP supported</p>
-            </div>
-          ) : (
-            <div className="relative">
-              <img
-                src={previewUrl}
-                alt="Empty truck preview"
-                className="w-full h-48 object-cover rounded-lg border border-border"
-              />
-              {!uploading && !uploaded && (
-                <button
-                  onClick={() => { setSelectedFile(null); setPreviewUrl(null); }}
-                  className="absolute top-2 right-2 bg-destructive text-destructive-foreground rounded-full p-1 hover:opacity-90"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          )}
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handleFileSelect}
-          />
-
-          {uploading && (
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Uploading... {uploadProgress}%</p>
-              <Progress value={uploadProgress} className="h-2" />
-            </div>
-          )}
-
-          {uploaded && (
-            <div className="flex items-center gap-2 text-green-600">
-              <CheckCircle className="w-5 h-5" />
-              <span className="text-sm font-medium">Image uploaded successfully!</span>
-            </div>
-          )}
+          <p className="text-sm text-muted-foreground">
+            Please upload a photo of the empty truck after delivery for order{' '}
+            <span className="font-mono font-medium">{orderId}</span>.
+          </p>
 
           {error && (
-            <p className="text-sm text-destructive">{error}</p>
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           )}
 
-          <div className="flex gap-3 justify-end">
-            <Button variant="outline" onClick={handleClose} disabled={uploading}>
-              {uploaded ? 'Close' : 'Skip'}
-            </Button>
-            {!uploaded && (
-              <Button onClick={handleUpload} disabled={!selectedFile || uploading}>
-                {uploading ? 'Uploading...' : 'Upload Image'}
-              </Button>
+          {success && (
+            <Alert className="border-green-200 bg-green-50 text-green-800">
+              <CheckCircle className="h-4 w-4" />
+              <AlertDescription>Image uploaded successfully!</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium block">
+              <Upload className="h-4 w-4 inline mr-1" />
+              Select Image *
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              disabled={isUploading}
+              className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 disabled:opacity-50"
+            />
+            {selectedFile && (
+              <p className="text-xs text-green-600">✓ {selectedFile.name}</p>
             )}
           </div>
+
+          {isUploading && uploadProgress > 0 && (
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Uploading...</span>
+                <span>{uploadProgress}%</span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2">
+                <div
+                  className="bg-primary h-2 rounded-full transition-all"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose} disabled={isUploading}>
+            {success ? 'Close' : 'Skip'}
+          </Button>
+          <Button
+            onClick={handleUpload}
+            disabled={!selectedFile || isUploading || success}
+          >
+            {isUploading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Uploading...
+              </>
+            ) : (
+              <>
+                <Upload className="h-4 w-4 mr-2" />
+                Upload
+              </>
+            )}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

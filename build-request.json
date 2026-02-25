@@ -1,74 +1,98 @@
 {
   "kind": "build_request",
-  "title": "Fix blank page crash after deployment",
+  "title": "Fix QR flow: invoice generation and delivery panel assignment issues",
+  "projectName": "Vitalist Water",
   "priority": "high",
   "requirements": [
     {
       "id": "REQ-1",
-      "text": "Diagnose and fix the blank page issue that occurs after deployment. Audit App.tsx for runtime errors including undefined variable access, failed imports, missing null guards on authentication state, and role-based routing logic that may throw before rendering. Ensure the app renders a visible UI for all authentication states (unauthenticated, loading, authenticated with any role).",
-      "target": "frontend",
+      "text": "Fix invoice generation so that when an order's QR code is scanned or when the invoice modal is opened, the invoice is correctly fetched and rendered with all order details, store info, line items, and the QR code. Trace the full call path from InvoiceModal → InvoiceView → backend queries and ensure the order ID lookup, store lookup, and data assembly succeed without errors. Add defensive null/undefined checks for all fields rendered in InvoiceView.",
+      "target": "both",
       "source": {
         "messageIds": [
-          "msg-1"
+          "msg-4"
         ],
         "quotes": [
-          "The page is gone blank of this"
+          "the invoice is not generating"
         ]
       },
       "acceptanceCriteria": [
-        "The app loads and displays the login page or dashboard without going blank after a fresh deployment",
-        "No unhandled JavaScript exceptions are thrown during initial render",
-        "All role-based routes (admin, staff, delivery, distributor) render without blank screens",
-        "Unauthenticated users see the login page instead of a blank screen",
-        "The app recovers gracefully if backend actor initialization is slow or fails"
+        "Opening the invoice modal for any order displays the fully rendered invoice with order details, store info, and QR code.",
+        "No console errors or blank states appear when the invoice modal is opened.",
+        "If order or store data is momentarily loading, a skeleton/loading state is shown rather than a crash or empty render.",
+        "The print button in InvoiceView functions correctly."
       ]
     },
     {
       "id": "REQ-2",
-      "text": "Add a top-level error boundary component wrapping the entire React application in App.tsx to catch and display any unhandled render errors with a user-friendly fallback UI instead of a blank page. The fallback should show the app name and a message indicating an error occurred with a reload button.",
-      "target": "frontend",
+      "text": "Fix the delivery assignment flow so that after an admin assigns an order to a delivery user (sets assignedDeliveryUser on the order), that order immediately appears in the DeliveryDashboard for the assigned delivery user. Audit the backend assignOrder / updateOrder logic to confirm assignedDeliveryUser is persisted correctly. Audit useQueries.ts to confirm the delivery dashboard query filters orders by the logged-in user's principal/ID against assignedDeliveryUser. Fix any mismatch between how the assignment is stored and how it is queried.",
+      "target": "both",
       "source": {
         "messageIds": [
-          "msg-1"
+          "msg-4"
         ],
         "quotes": [
-          "The page is gone blank of this"
+          "after assign to delivery it's not showing in delivery panel"
         ]
       },
       "acceptanceCriteria": [
-        "A React ErrorBoundary component wraps the top-level app content",
-        "When a render error is caught, a fallback UI is displayed instead of a blank page",
-        "The fallback UI includes a reload/retry button",
-        "The error boundary does not interfere with normal app rendering"
+        "After an admin assigns an order to a delivery user, that order appears in the delivery user's DeliveryDashboard without requiring a page reload beyond normal React Query refetch.",
+        "The delivery dashboard only shows orders assigned to the currently logged-in delivery user.",
+        "Orders with statuses 'Dispatched' and 'Out for Delivery' are visible to the assigned delivery user.",
+        "No orders from other delivery users are shown in the panel."
       ]
     },
     {
       "id": "REQ-3",
-      "text": "Audit all lazy-loaded or dynamically imported components (maps, Leaflet, QR scanner, camera) for missing Suspense boundaries or import failures that could cause a blank render. Wrap all such components with React.Suspense and appropriate loading fallbacks.",
-      "target": "frontend",
+      "text": "Fix the end-to-end QR scan flow across all role-based pipeline stages (admin, staff, delivery) in ScanPage and DeliveryDashboard. Ensure that: (1) the QRScanModal camera activates reliably, (2) the scanned value is correctly decoded using the VITALIST-prefix logic in qrGenerator.ts / orderUtils.ts, (3) the decoded order ID is matched to a real order in the backend, and (4) the appropriate status transition mutation is called and confirmed. Handle cases where the scanned QR value does not match any order by showing a clear error message.",
+      "target": "both",
       "source": {
         "messageIds": [
-          "msg-1"
+          "msg-4"
         ],
         "quotes": [
-          "The page is gone blank of this"
+          "The qr flow is not going throw"
         ]
       },
       "acceptanceCriteria": [
-        "All dynamically imported components (SatelliteMapView, QRScanModal, BarcodeScanStep) have Suspense boundaries with loading indicators",
-        "A failure to load a dynamic component does not blank out the entire page",
-        "Loading states are visible while async components initialize"
+        "Scanning a valid order QR code in any role-based scan flow (admin, staff, delivery) correctly identifies the order and triggers the status update.",
+        "The camera activates without errors when the QR scan modal is opened.",
+        "A successfully scanned and processed QR code shows a success confirmation to the user.",
+        "Scanning an unrecognized or malformed QR code shows a user-friendly error message instead of crashing.",
+        "The DistributorWorkflowDialog barcode scan step also correctly resolves the scanned order and proceeds to the image upload step."
+      ]
+    },
+    {
+      "id": "REQ-4",
+      "text": "Audit and fix the QRPrintView and QRCodeDisplay components to ensure the QR code image URL is generated correctly using qrGenerator.ts (with the VITALIST-prefixed, base64-encoded order ID) and that the image loads without CORS or URL encoding errors. Verify the QR code printed/displayed encodes exactly the value the scan decoder expects.",
+      "target": "frontend",
+      "source": {
+        "messageIds": [
+          "msg-4"
+        ],
+        "quotes": [
+          "The qr flow is not going throw",
+          "the invoice is not generating"
+        ]
+      },
+      "acceptanceCriteria": [
+        "QR codes displayed in QRCodeDisplay and QRPrintView load successfully as images.",
+        "The encoded value in the QR image matches the format expected by the scan decoder (VITALIST prefix + base64 order ID).",
+        "Scanning a printed/displayed QR code resolves to the correct order in the backend."
       ]
     }
   ],
   "constraints": [
-    "Do not modify files under frontend/src/hooks/useInternetIdentity.ts, frontend/src/hooks/useActor.ts, frontend/src/main.tsx, or frontend/src/components/ui",
-    "Do not change the backend schema or data model"
+    "Do not change the authentication or Internet Identity flows.",
+    "Do not alter immutable frontend paths: useInternetIdentity.ts, useActor.ts, main.tsx, or src/components/ui.",
+    "Preserve all existing role-based access control logic in the backend and frontend.",
+    "All Motoko changes must remain within the single-actor pattern in backend/main.mo."
   ],
   "nonGoals": [
-    "Adding new features or pages",
-    "Changing the visual design or color theme",
-    "Modifying backend logic"
+    "Adding new order statuses or workflow stages.",
+    "Redesigning the UI layout or visual theme.",
+    "Adding new user roles.",
+    "Real-time / WebSocket delivery tracking."
   ],
   "imageRequirements": {
     "required": [],

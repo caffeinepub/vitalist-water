@@ -1,348 +1,376 @@
-import React, { useState } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
-import { useActor } from '../../hooks/useActor';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { OrderRecord, Store, ExternalBlob } from '../../backend';
-import {
-  Truck, QrCode, MapPin, Package, CheckCircle, Loader2, Navigation,
-} from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import { Package, Truck, CheckCircle, QrCode, MapPin, RefreshCw, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
 import QRScanModal from '../../components/qr/QRScanModal';
 import EmptyTruckImageUpload from '../../components/delivery/EmptyTruckImageUpload';
-
-const DELIVERY_STATUSES = ['Dispatched', 'Out for Delivery'];
-
-function getCurrentPosition(): Promise<GeolocationPosition> {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('Geolocation not supported'));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
-  });
-}
+import {
+  useGetAssignedOrdersForDeliveryUser,
+  useUpdateOrderStatusByDeliveryUser,
+  useAddGpsLocation,
+} from '../../hooks/useQueries';
+import { useAuth } from '../../contexts/AuthContext';
+import { useInternetIdentity } from '../../hooks/useInternetIdentity';
+import { decodeQRData } from '../../utils/orderUtils';
+import type { OrderRecord } from '../../backend';
+import { Principal } from '@dfinity/principal';
 
 export default function DeliveryDashboard() {
-  const { user } = useAuth();
-  const { actor, isFetching: actorFetching } = useActor();
-  const queryClient = useQueryClient();
+  const { sessionEmail } = useAuth();
+  const { identity } = useInternetIdentity();
 
-  // scanningOrder holds the order we want to scan for; null means modal is closed
-  const [scanningOrder, setScanningOrder] = useState<OrderRecord | null>(null);
-  const [showEmptyTruckUpload, setShowEmptyTruckUpload] = useState<string | null>(null);
+  const [scanModalOpen, setScanModalOpen] = useState(false);
+  const [scanTargetOrder, setScanTargetOrder] = useState<OrderRecord | null>(null);
+  const [scanAction, setScanAction] = useState<'dispatch' | 'deliver' | null>(null);
+  const [emptyTruckUploadOpen, setEmptyTruckUploadOpen] = useState(false);
+  const [deliveredOrderId, setDeliveredOrderId] = useState<string | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanSuccess, setScanSuccess] = useState<string | null>(null);
-  const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
 
-  const sessionEmail = user?.email || '';
+  const deliveryPrincipal: Principal | null = React.useMemo(() => {
+    if (!identity) return null;
+    try {
+      return identity.getPrincipal();
+    } catch {
+      return null;
+    }
+  }, [identity]);
 
-  const { data: allOrders, isLoading } = useQuery<OrderRecord[]>({
-    queryKey: ['allOrders', sessionEmail],
-    queryFn: async () => {
-      if (!actor) return [];
-      return actor.getAllOrders(sessionEmail);
-    },
-    enabled: !!actor && !actorFetching && !!sessionEmail,
-  });
+  const {
+    data: assignedOrders,
+    isLoading,
+    error,
+    refetch,
+  } = useGetAssignedOrdersForDeliveryUser(deliveryPrincipal, sessionEmail);
 
-  const { data: stores } = useQuery<Store[]>({
-    queryKey: ['stores', sessionEmail],
-    queryFn: async () => {
-      if (!actor) return [];
-      return actor.getAllStores(sessionEmail);
-    },
-    enabled: !!actor && !actorFetching && !!sessionEmail,
-  });
+  const updateStatusMutation = useUpdateOrderStatusByDeliveryUser();
+  const addGpsMutation = useAddGpsLocation();
 
-  const deliveryOrders = (allOrders || []).filter((o) =>
-    DELIVERY_STATUSES.includes(o.status)
-  );
+  const activeOrders = React.useMemo(() => {
+    if (!assignedOrders) return [];
+    return assignedOrders.filter((o) =>
+      ['Assigned to Delivery', 'Dispatched', 'Out for Delivery'].includes(o.status)
+    );
+  }, [assignedOrders]);
 
-  const scanQRMutation = useMutation({
-    mutationFn: async ({
-      orderId,
-      qrValue,
-      currentStatus,
-    }: {
-      orderId: string;
-      qrValue: string;
-      currentStatus: string;
-    }) => {
-      if (!actor) throw new Error('Actor not available');
+  const completedOrders = React.useMemo(() => {
+    if (!assignedOrders) return [];
+    return assignedOrders.filter((o) =>
+      ['Delivered', 'Trucks in Transit', 'Distributor Confirmations Pending'].includes(o.status)
+    );
+  }, [assignedOrders]);
 
-      // Update status via QR
-      await actor.updateOrderStatusUsingQR(orderId, qrValue, sessionEmail);
-
-      // If transitioning from Dispatched → Out for Delivery, also record GPS
-      if (currentStatus === 'Dispatched') {
-        try {
-          const pos = await getCurrentPosition();
-          await actor.addGpsLocation(
-            orderId,
-            pos.coords.latitude,
-            pos.coords.longitude,
-            sessionEmail
-          );
-        } catch {
-          // GPS is best-effort; don't fail the whole operation
-        }
-      }
-
-      return { orderId, currentStatus };
-    },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['allOrders'] });
-      setScanningOrder(null);
-      setProcessingOrderId(null);
-
-      if (result.currentStatus === 'Out for Delivery') {
-        // After marking as delivered, prompt for empty truck image
-        setShowEmptyTruckUpload(result.orderId);
-        setScanSuccess(`Order ${result.orderId} marked as delivered!`);
-      } else {
-        setScanSuccess(`Order ${result.orderId} status updated successfully!`);
-      }
-      setTimeout(() => setScanSuccess(null), 4000);
-    },
-    onError: (err: any) => {
-      setScanError(err?.message || 'QR scan failed. Please try again.');
-      setProcessingOrderId(null);
-    },
-  });
-
-  const addEmptyTruckImageMutation = useMutation({
-    mutationFn: async ({ orderId, blob }: { orderId: string; blob: ExternalBlob }) => {
-      if (!actor) throw new Error('Actor not available');
-      await actor.addEmptyTruckImage(orderId, blob, sessionEmail);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['allOrders'] });
-    },
-  });
-
-  // This is called by QRScanModal via onScanned(orderId) — orderId here is the decoded QR value
-  const handleScanned = (scannedValue: string) => {
-    if (!scanningOrder) return;
+  const handleOpenScan = useCallback((order: OrderRecord, action: 'dispatch' | 'deliver') => {
+    setScanTargetOrder(order);
+    setScanAction(action);
     setScanError(null);
-    setProcessingOrderId(scanningOrder.orderId);
-    scanQRMutation.mutate({
-      orderId: scanningOrder.orderId,
-      qrValue: scannedValue,
-      currentStatus: scanningOrder.status,
-    });
-  };
+    setScanSuccess(null);
+    setScanModalOpen(true);
+  }, []);
 
-  const handleEmptyTruckUpload = async (orderId: string, blob: ExternalBlob) => {
-    await addEmptyTruckImageMutation.mutateAsync({ orderId, blob });
-  };
+  const handleScanned = useCallback(async (scannedValue: string) => {
+    setScanModalOpen(false);
+    setScanError(null);
+    setScanSuccess(null);
 
-  const getStoreName = (storeId: bigint): string => {
-    const store = (stores || []).find((_, idx) => BigInt(idx + 1) === storeId);
-    return store?.storeName || `Store #${storeId.toString()}`;
-  };
+    if (!scanTargetOrder || !scanAction) return;
 
-  const getStoreAddress = (storeId: bigint): string => {
-    const store = (stores || []).find((_, idx) => BigInt(idx + 1) === storeId);
-    return store?.address || '';
-  };
+    const decodedOrderId = decodeQRData(scannedValue);
 
-  const handleNavigate = (storeId: bigint) => {
-    const store = (stores || []).find((_, idx) => BigInt(idx + 1) === storeId);
-    if (store) {
-      const url = `https://www.google.com/maps/dir/?api=1&destination=${store.latitude},${store.longitude}`;
-      window.open(url, '_blank');
+    if (!decodedOrderId) {
+      setScanError('Invalid QR code scanned. Please try again.');
+      return;
     }
-  };
 
-  const getScanButtonLabel = (status: string) => {
-    switch (status) {
-      case 'Dispatched': return 'Scan QR — Start Delivery';
-      case 'Out for Delivery': return 'Scan QR — Mark Delivered';
-      default: return 'Scan QR';
+    if (decodedOrderId !== scanTargetOrder.orderId) {
+      setScanError(
+        `QR code does not match this order. Expected: ${scanTargetOrder.orderId}, Got: ${decodedOrderId}`
+      );
+      return;
     }
-  };
 
-  const stats = {
-    dispatched: deliveryOrders.filter((o) => o.status === 'Dispatched').length,
-    outForDelivery: deliveryOrders.filter((o) => o.status === 'Out for Delivery').length,
-  };
+    try {
+      if (scanAction === 'dispatch') {
+        await updateStatusMutation.mutateAsync({
+          orderId: scanTargetOrder.orderId,
+          newStatus: 'Out for Delivery',
+          sessionEmail,
+        });
+
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+              try {
+                await addGpsMutation.mutateAsync({
+                  orderId: scanTargetOrder.orderId,
+                  latitude: pos.coords.latitude,
+                  longitude: pos.coords.longitude,
+                  sessionEmail,
+                });
+              } catch {
+                // GPS update failure is non-critical
+              }
+            },
+            () => {
+              // GPS permission denied - non-critical
+            }
+          );
+        }
+
+        setScanSuccess(`Order ${scanTargetOrder.orderId} marked as Out for Delivery!`);
+      } else if (scanAction === 'deliver') {
+        await updateStatusMutation.mutateAsync({
+          orderId: scanTargetOrder.orderId,
+          newStatus: 'Trucks in Transit',
+          sessionEmail,
+        });
+
+        setScanSuccess(`Order ${scanTargetOrder.orderId} marked as Trucks in Transit!`);
+        setDeliveredOrderId(scanTargetOrder.orderId);
+        setEmptyTruckUploadOpen(true);
+      }
+
+      refetch();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update order status';
+      setScanError(message);
+    } finally {
+      setScanTargetOrder(null);
+      setScanAction(null);
+    }
+  }, [scanTargetOrder, scanAction, sessionEmail, updateStatusMutation, addGpsMutation, refetch]);
+
+  if (!identity) {
+    return (
+      <div className="p-6">
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Please log in to view your delivery assignments.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-          <Truck className="w-6 h-6 text-primary" />
-          Delivery Dashboard
-        </h1>
-        <p className="text-muted-foreground text-sm mt-1">Manage your active deliveries</p>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-4">
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                <Package className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{stats.dispatched}</p>
-                <p className="text-xs text-muted-foreground">Dispatched</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
-                <Truck className="w-5 h-5 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{stats.outForDelivery}</p>
-                <p className="text-xs text-muted-foreground">Out for Delivery</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {scanSuccess && (
-        <div className="flex items-center gap-2 text-green-600 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-          <CheckCircle className="w-4 h-4" />
-          <span className="text-sm">{scanSuccess}</span>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Delivery Dashboard</h1>
+          <p className="text-muted-foreground text-sm mt-1">Manage your assigned deliveries</p>
         </div>
-      )}
+        <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
+          <RefreshCw className="h-4 w-4" />
+          Refresh
+        </Button>
+      </div>
 
       {scanError && (
-        <div className="p-3 bg-destructive/10 text-destructive rounded-lg border border-destructive/20 text-sm flex items-center justify-between">
-          <span>{scanError}</span>
-          <button onClick={() => setScanError(null)} className="underline ml-3">Dismiss</button>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{scanError}</AlertDescription>
+        </Alert>
+      )}
+      {scanSuccess && (
+        <Alert className="border-green-200 bg-green-50 text-green-800">
+          <CheckCircle className="h-4 w-4" />
+          <AlertDescription>{scanSuccess}</AlertDescription>
+        </Alert>
+      )}
+
+      {isLoading && (
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <Card key={i}>
+              <CardContent className="p-4">
+                <Skeleton className="h-6 w-48 mb-2" />
+                <Skeleton className="h-4 w-full mb-1" />
+                <Skeleton className="h-4 w-3/4" />
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
 
-      {/* Delivery Orders */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Truck className="w-4 h-4" />
-            Active Deliveries ({deliveryOrders.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="p-8 text-center text-muted-foreground">Loading deliveries...</div>
-          ) : deliveryOrders.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              <Truck className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p>No active deliveries assigned to you.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Order ID</TableHead>
-                    <TableHead>Store</TableHead>
-                    <TableHead>Address</TableHead>
-                    <TableHead>Qty</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {deliveryOrders.map((order) => {
-                    const isProcessing = processingOrderId === order.orderId;
-                    return (
-                      <TableRow key={order.orderId}>
-                        <TableCell className="font-mono text-xs font-medium">{order.orderId}</TableCell>
-                        <TableCell className="text-sm">{getStoreName(order.storeId)}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground max-w-[150px] truncate">
-                          {getStoreAddress(order.storeId)}
-                        </TableCell>
-                        <TableCell>{order.quantity.toString()}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={order.status === 'Out for Delivery' ? 'default' : 'secondary'}
-                            className="text-xs whitespace-nowrap"
-                          >
-                            {order.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {order.qrCode && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-xs h-7"
-                                disabled={isProcessing}
-                                onClick={() => {
-                                  setScanError(null);
-                                  setScanningOrder(order);
-                                }}
-                              >
-                                {isProcessing ? (
-                                  <Loader2 className="w-3 h-3 animate-spin" />
-                                ) : (
-                                  <>
-                                    <QrCode className="w-3 h-3 mr-1" />
-                                    {getScanButtonLabel(order.status)}
-                                  </>
-                                )}
-                              </Button>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-xs h-7"
-                              onClick={() => handleNavigate(order.storeId)}
-                            >
-                              <Navigation className="w-3 h-3 mr-1" />
-                              Navigate
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {error && !isLoading && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>Failed to load assigned orders. Please refresh.</AlertDescription>
+        </Alert>
+      )}
 
-      {/* QR Scan Modal — uses existing onScanned interface */}
+      {!isLoading && !error && activeOrders.length === 0 && (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <Package className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+            <p className="text-muted-foreground font-medium">No active deliveries assigned</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Orders assigned to you will appear here.
+            </p>
+            <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Check for new assignments
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!isLoading && activeOrders.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Truck className="h-5 w-5 text-primary" />
+            Active Deliveries ({activeOrders.length})
+          </h2>
+          {activeOrders.map((order) => (
+            <OrderCard
+              key={order.orderId}
+              order={order}
+              onScan={handleOpenScan}
+              isUpdating={updateStatusMutation.isPending}
+            />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && completedOrders.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <CheckCircle className="h-5 w-5 text-green-600" />
+            Completed ({completedOrders.length})
+          </h2>
+          {completedOrders.map((order) => (
+            <Card key={order.orderId} className="opacity-75">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-sm">{order.orderId}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Qty: {String(order.quantity)} | Rate: ₹{order.rate}
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="text-green-600 border-green-200">
+                    {order.status}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
       <QRScanModal
-        open={!!scanningOrder}
+        open={scanModalOpen}
         onClose={() => {
-          setScanningOrder(null);
-          setScanError(null);
+          setScanModalOpen(false);
+          setScanTargetOrder(null);
+          setScanAction(null);
         }}
         onScanned={handleScanned}
-        title="Delivery QR Scan"
-        description={
-          scanningOrder
-            ? `Scanning for order ${scanningOrder.orderId} — ${scanningOrder.status}`
-            : 'Scan the order QR code'
-        }
+        title={scanAction === 'dispatch' ? 'Scan QR to Dispatch' : 'Scan QR to Mark Delivered'}
       />
 
-      {/* Empty Truck Image Upload */}
-      {showEmptyTruckUpload && (
+      {deliveredOrderId && (
         <EmptyTruckImageUpload
-          orderId={showEmptyTruckUpload}
-          open={!!showEmptyTruckUpload}
-          onClose={() => setShowEmptyTruckUpload(null)}
-          onUpload={handleEmptyTruckUpload}
+          open={emptyTruckUploadOpen}
+          orderId={deliveredOrderId}
+          onClose={() => {
+            setEmptyTruckUploadOpen(false);
+            setDeliveredOrderId(null);
+          }}
         />
       )}
     </div>
+  );
+}
+
+interface OrderCardProps {
+  order: OrderRecord;
+  onScan: (order: OrderRecord, action: 'dispatch' | 'deliver') => void;
+  isUpdating: boolean;
+}
+
+function OrderCard({ order, onScan, isUpdating }: OrderCardProps) {
+  const canDispatch = order.status === 'Dispatched';
+  const canDeliver = order.status === 'Out for Delivery';
+  const isAssigned = order.status === 'Assigned to Delivery';
+
+  return (
+    <Card className="border-l-4 border-l-primary">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base font-semibold">{order.orderId}</CardTitle>
+          <Badge
+            variant={
+              order.status === 'Out for Delivery'
+                ? 'default'
+                : order.status === 'Dispatched'
+                ? 'secondary'
+                : 'outline'
+            }
+          >
+            {order.status}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0 space-y-3">
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <div>
+            <span className="text-muted-foreground">Quantity:</span>{' '}
+            <span className="font-medium">{String(order.quantity)}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">Rate:</span>{' '}
+            <span className="font-medium">₹{order.rate}</span>
+          </div>
+        </div>
+
+        {order.notes && (
+          <p className="text-xs text-muted-foreground bg-muted/50 rounded p-2">{order.notes}</p>
+        )}
+
+        {order.gpsLocation && (
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <MapPin className="h-3 w-3" />
+            <span>
+              {order.gpsLocation.latitude.toFixed(4)}, {order.gpsLocation.longitude.toFixed(4)}
+            </span>
+          </div>
+        )}
+
+        <div className="flex gap-2 pt-1">
+          {isAssigned && (
+            <p className="text-xs text-muted-foreground italic">
+              Waiting for dispatch confirmation
+            </p>
+          )}
+          {canDispatch && (
+            <Button
+              size="sm"
+              onClick={() => onScan(order, 'dispatch')}
+              disabled={isUpdating}
+              className="gap-2"
+            >
+              <QrCode className="h-4 w-4" />
+              Scan to Confirm Out for Delivery
+            </Button>
+          )}
+          {canDeliver && (
+            <Button
+              size="sm"
+              onClick={() => onScan(order, 'deliver')}
+              disabled={isUpdating}
+              className="gap-2 bg-green-600 hover:bg-green-700"
+            >
+              <QrCode className="h-4 w-4" />
+              Scan to Mark Delivered
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

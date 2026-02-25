@@ -1,100 +1,66 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useActor } from '../hooks/useActor';
 
-export type AppRole = 'admin' | 'staff' | 'delivery' | 'distributor';
-
-interface AuthUser {
+export interface AuthUser {
   email: string;
-  role: AppRole;
+  role: 'admin' | 'staff' | 'delivery' | 'distributor';
   token: string;
 }
 
-interface AuthContextType {
+export interface AuthContextType {
   user: AuthUser | null;
+  sessionEmail: string;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   isLoading: boolean;
-  isAuthenticated: boolean;
-  // backward-compat aliases
-  currentUser: AuthUser | null;
-  isAdmin: boolean;
-  isStaff: boolean;
-  isDelivery: boolean;
-  isDistributor: boolean;
+  error: string | null;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-const SESSION_KEY = 'vitalist_session';
-
-function safeGetSession(): AuthUser | null {
-  try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && parsed.email && parsed.role && parsed.token) {
-      return parsed as AuthUser;
-    }
-    return null;
-  } catch {
-    try {
-      sessionStorage.removeItem(SESSION_KEY);
-    } catch {
-      // ignore
-    }
-    return null;
-  }
-}
-
-function safeSaveSession(user: AuthUser): void {
-  try {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
-  } catch {
-    // ignore storage errors
-  }
-}
-
-function safeClearSession(): void {
-  try {
-    sessionStorage.removeItem(SESSION_KEY);
-  } catch {
-    // ignore
-  }
-}
+const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { actor } = useActor();
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const { actor, isFetching: actorFetching } = useActor();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Restore session on mount
+  // Restore session from sessionStorage on mount
   useEffect(() => {
-    const restored = safeGetSession();
-    if (restored) {
-      setUser(restored);
+    const stored = sessionStorage.getItem('auth_user');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as AuthUser;
+        setUser(parsed);
+      } catch {
+        sessionStorage.removeItem('auth_user');
+      }
     }
-    setIsLoading(false);
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    if (!actor) return false;
+    if (!actor) {
+      setError('System not ready. Please try again.');
+      return false;
+    }
+    setIsLoading(true);
+    setError(null);
     try {
-      setIsLoading(true);
       const result = await actor.login(email, password);
-      if (result && result.role) {
-        const role = result.role as AppRole;
+      if (result) {
         const authUser: AuthUser = {
           email,
-          role,
+          role: result.role as AuthUser['role'],
           token: result.token,
         };
         setUser(authUser);
-        safeSaveSession(authUser);
+        sessionStorage.setItem('auth_user', JSON.stringify(authUser));
         return true;
+      } else {
+        setError('Invalid email or password.');
+        return false;
       }
-      return false;
     } catch (err) {
-      console.error('Login error:', err);
+      setError('Login failed. Please try again.');
       return false;
     } finally {
       setIsLoading(false);
@@ -103,36 +69,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setUser(null);
-    safeClearSession();
+    sessionStorage.removeItem('auth_user');
   };
 
-  const isAuthenticated = user !== null;
-  const isAdmin = user?.role === 'admin';
-  const isStaff = user?.role === 'staff';
-  const isDelivery = user?.role === 'delivery';
-  const isDistributor = user?.role === 'distributor';
+  const sessionEmail = user?.email ?? '';
 
-  const value: AuthContextType = {
-    user,
-    login,
-    logout,
-    isLoading: isLoading || actorFetching,
-    isAuthenticated,
-    // backward-compat aliases
-    currentUser: user,
-    isAdmin,
-    isStaff,
-    isDelivery,
-    isDistributor,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, sessionEmail, login, logout, isLoading, error }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth(): AuthContextType {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
 }

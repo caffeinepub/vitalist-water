@@ -14,6 +14,15 @@ export type AppUserRole = { 'admin' : null } |
   { 'distributor' : null } |
   { 'staff' : null } |
   { 'delivery' : null };
+export interface CreateOrderInput {
+  'invoicePDF' : [] | [Uint8Array],
+  'storeId' : bigint,
+  'rate' : number,
+  'orderId' : string,
+  'notes' : string,
+  'timestamp' : bigint,
+  'quantity' : bigint,
+}
 export interface DistributorDelivery {
   'distributor' : Principal,
   'deliveryId' : string,
@@ -37,6 +46,7 @@ export interface OrderRecord {
   'storeId' : bigint,
   'loadedTruckImage' : [] | [Uint8Array],
   'rate' : number,
+  'assignedDeliveryUser' : [] | [Principal],
   'orderId' : string,
   'gpsLocation' : [] | [GpsLocation],
   'notes' : string,
@@ -116,11 +126,12 @@ export interface _SERVICE {
   >,
   'approveOrder' : ActorMethod<[string, string, string], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'assignDelivery' : ActorMethod<[string, Principal, string], undefined>,
   'createDistributorDelivery' : ActorMethod<
     [DistributorDelivery, string],
     undefined
   >,
-  'createOrder' : ActorMethod<[OrderRecord, string], undefined>,
+  'createOrder' : ActorMethod<[CreateOrderInput, string], undefined>,
   'deleteDistributorDelivery' : ActorMethod<[string, string], undefined>,
   'deleteStore' : ActorMethod<[bigint, string], undefined>,
   'deleteUser' : ActorMethod<[string, string], undefined>,
@@ -143,6 +154,10 @@ export interface _SERVICE {
   'getAllOrders' : ActorMethod<[string], Array<OrderRecord>>,
   'getAllStores' : ActorMethod<[string], Array<Store>>,
   'getAllUsers' : ActorMethod<[string], Array<User>>,
+  'getAssignedOrdersForDeliveryUser' : ActorMethod<
+    [Principal, string],
+    Array<OrderRecord>
+  >,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getDeliveryVerificationRecords' : ActorMethod<
@@ -202,6 +217,10 @@ export interface _SERVICE {
     undefined
   >,
   'updateOrder' : ActorMethod<[string, OrderRecord, string], undefined>,
+  'updateOrderStatusByDeliveryUser' : ActorMethod<
+    [string, string, string],
+    undefined
+  >,
   'updateOrderStatusUsingQR' : ActorMethod<[string, string, string], undefined>,
   'updateStore' : ActorMethod<[bigint, Store, string], undefined>,
   'updateUser' : ActorMethod<[string, User, string], undefined>,

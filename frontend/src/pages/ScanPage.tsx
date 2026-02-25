@@ -1,286 +1,170 @@
-import React, { useState } from 'react';
-import { useAllOrders, useUpdateOrder } from '../hooks/useQueries';
-import { useAuth } from '../contexts/AuthContext';
-import { OrderRecord } from '../backend';
+import React, { useState, useCallback } from 'react';
+import { QrCode, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import StatusBadge from '../components/orders/StatusBadge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import QRScanModal from '../components/qr/QRScanModal';
-import { ScanLine, CheckCircle, AlertCircle, Package, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
-import { parseOrderMeta, buildNotesWithMeta } from '../utils/orderUtils';
-import { getCurrentPosition } from '../utils/geoUtils';
+import { useAllOrders, useUpdateOrderStatusUsingQR } from '../hooks/useQueries';
+import { useAuth } from '../contexts/AuthContext';
+import { decodeQRData } from '../utils/orderUtils';
+import type { OrderRecord } from '../backend';
 
-interface ScanPageProps {
-  role: 'admin' | 'staff' | 'delivery';
-}
-
-const STAGE_CONFIG = {
-  admin: {
-    title: 'Stage 1 — Admin Scan',
-    subtitle: 'Scan QR to confirm packing and mark order as Ready',
-    fromStatus: 'Approved',
-    toStatus: 'Ready',
-    color: 'text-green-600',
-    bgColor: 'bg-green-50',
-    borderColor: 'border-green-200',
-    requiresGPS: false,
-    metaKey: 'stage1Timestamp' as const,
-  },
-  staff: {
-    title: 'Stage 2 — Staff Scan',
-    subtitle: 'Scan QR to confirm handover and mark order as Dispatched',
-    fromStatus: 'Ready',
-    toStatus: 'Dispatched',
-    color: 'text-amber-600',
-    bgColor: 'bg-amber-50',
-    borderColor: 'border-amber-200',
-    requiresGPS: false,
-    metaKey: 'stage2Timestamp' as const,
-  },
-  delivery: {
-    title: 'Stage 3/4 — Delivery Scan',
-    subtitle: 'Scan QR to update delivery status with GPS location',
-    fromStatus: 'Dispatched',
-    toStatus: 'Out for Delivery',
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-50',
-    borderColor: 'border-blue-200',
-    requiresGPS: true,
-    metaKey: 'stage3Timestamp' as const,
-  },
-};
-
-export default function ScanPage({ role }: ScanPageProps) {
-  const config = STAGE_CONFIG[role];
-  const { user } = useAuth();
-  const sessionEmail = user?.email ?? '';
-
-  const { data: orders = [] } = useAllOrders(sessionEmail);
-  const updateOrder = useUpdateOrder();
+export default function ScanPage() {
+  const { sessionEmail, user } = useAuth();
 
   const [scanModalOpen, setScanModalOpen] = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const [lastResult, setLastResult] = useState<{ success: boolean; message: string; orderId?: string } | null>(null);
+  const [lastScannedOrder, setLastScannedOrder] = useState<OrderRecord | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanSuccess, setScanSuccess] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleScanned = async (orderId: string) => {
-    setProcessing(true);
-    setLastResult(null);
+  const { data: orders, refetch } = useAllOrders(sessionEmail);
+  const updateStatusMutation = useUpdateOrderStatusUsingQR();
+
+  const handleScanned = useCallback(async (scannedValue: string) => {
+    setScanModalOpen(false);
+    setScanError(null);
+    setScanSuccess(null);
+    setIsProcessing(true);
 
     try {
-      const order = orders.find((o) => o.orderId === orderId);
+      const decodedOrderId = decodeQRData(scannedValue);
+
+      if (!decodedOrderId) {
+        setScanError('Invalid QR code. Could not decode order ID.');
+        return;
+      }
+
+      const order = orders?.find((o) => o.orderId === decodedOrderId);
+
       if (!order) {
-        setLastResult({ success: false, message: `Order ${orderId} not found in the system.` });
+        setScanError(`Order "${decodedOrderId}" not found. Please refresh and try again.`);
         return;
       }
 
-      const { userNotes, meta } = parseOrderMeta(order.notes);
-
-      // Delivery role handles both stage 3 and stage 4
-      if (role === 'delivery') {
-        if (order.status === 'Dispatched') {
-          let lat = 0, lng = 0;
-          try {
-            const pos = await getCurrentPosition();
-            lat = pos.latitude;
-            lng = pos.longitude;
-          } catch {
-            toast.warning('Could not get GPS location, proceeding without it');
-          }
-          const updatedMeta = {
-            ...meta,
-            stage3Timestamp: Date.now(),
-            stage3Lat: lat,
-            stage3Lng: lng,
-          };
-          await updateOrder.mutateAsync({
-            orderId,
-            updatedOrder: {
-              ...order,
-              status: 'Out for Delivery',
-              notes: buildNotesWithMeta(userNotes, updatedMeta),
-            },
-            sessionEmail,
-          });
-          setLastResult({ success: true, message: `Order ${orderId} → Out for Delivery`, orderId });
-          toast.success(`Order ${orderId} marked as Out for Delivery`);
-        } else if (order.status === 'Out for Delivery') {
-          let lat = 0, lng = 0;
-          try {
-            const pos = await getCurrentPosition();
-            lat = pos.latitude;
-            lng = pos.longitude;
-          } catch {
-            toast.warning('Could not get GPS location, proceeding without it');
-          }
-          const updatedMeta = {
-            ...meta,
-            stage4Timestamp: Date.now(),
-            stage4Lat: lat,
-            stage4Lng: lng,
-          };
-          await updateOrder.mutateAsync({
-            orderId,
-            updatedOrder: {
-              ...order,
-              status: 'Delivered',
-              notes: buildNotesWithMeta(userNotes, updatedMeta),
-            },
-            sessionEmail,
-          });
-          setLastResult({ success: true, message: `Order ${orderId} → Delivered ✓`, orderId });
-          toast.success(`Order ${orderId} marked as Delivered`);
-        } else {
-          setLastResult({
-            success: false,
-            message: `Order ${orderId} is in "${order.status}" status — not eligible for delivery scan`,
-          });
-        }
+      if (!order.qrCode) {
+        setScanError(`Order "${decodedOrderId}" does not have a QR code assigned yet.`);
         return;
       }
 
-      // Admin / Staff roles
-      if (order.status !== config.fromStatus) {
-        setLastResult({
-          success: false,
-          message: `Order ${orderId} is in "${order.status}" status. Expected "${config.fromStatus}".`,
-        });
-        return;
-      }
+      const qrCodeValue = order.qrCode.value;
 
-      let lat = 0, lng = 0;
-      if (config.requiresGPS) {
-        try {
-          const pos = await getCurrentPosition();
-          lat = pos.latitude;
-          lng = pos.longitude;
-        } catch {
-          toast.warning('Could not get GPS location, proceeding without it');
-        }
-      }
-
-      const updatedMeta = {
-        ...meta,
-        [config.metaKey]: Date.now(),
-        ...(config.requiresGPS
-          ? {
-              [`${config.metaKey.replace('Timestamp', 'Lat')}`]: lat,
-              [`${config.metaKey.replace('Timestamp', 'Lng')}`]: lng,
-            }
-          : {}),
-      };
-
-      await updateOrder.mutateAsync({
-        orderId,
-        updatedOrder: {
-          ...order,
-          status: config.toStatus,
-          notes: buildNotesWithMeta(userNotes, updatedMeta),
-        },
+      await updateStatusMutation.mutateAsync({
+        orderId: decodedOrderId,
+        qrCodeValue,
         sessionEmail,
       });
 
-      setLastResult({ success: true, message: `Order ${orderId} → ${config.toStatus}`, orderId });
-      toast.success(`Order ${orderId} updated to ${config.toStatus}`);
+      await refetch();
+      setLastScannedOrder(order);
+      setScanSuccess(`Order ${decodedOrderId} status updated successfully!`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      setLastResult({ success: false, message: `Failed: ${msg}` });
-      toast.error(`Scan failed: ${msg}`);
+      const message = err instanceof Error ? err.message : 'Failed to process QR scan';
+      setScanError(message);
     } finally {
-      setProcessing(false);
+      setIsProcessing(false);
     }
-  };
+  }, [orders, sessionEmail, updateStatusMutation, refetch]);
 
-  const eligibleOrders = orders.filter((o) => {
-    if (role === 'delivery') return o.status === 'Dispatched' || o.status === 'Out for Delivery';
-    return o.status === config.fromStatus;
-  });
+  const userRole = user?.role ?? 'staff';
 
   return (
-    <div className="space-y-6 animate-slide-up max-w-2xl mx-auto">
-      {/* Header */}
-      <div className={`rounded-xl border ${config.borderColor} ${config.bgColor} p-5`}>
-        <h1 className={`text-xl font-bold ${config.color}`}>{config.title}</h1>
-        <p className="text-sm text-muted-foreground mt-1">{config.subtitle}</p>
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">QR Scanner</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Scan order QR codes to update workflow status
+          </p>
+        </div>
+        <Badge variant="outline" className="capitalize">{userRole}</Badge>
       </div>
 
-      {/* Scan button */}
-      <div className="flex flex-col items-center gap-4 py-6">
-        <div className={`w-24 h-24 rounded-2xl ${config.bgColor} border-2 ${config.borderColor} flex items-center justify-center`}>
-          <ScanLine className={`h-12 w-12 ${config.color}`} />
-        </div>
-        <Button
-          size="lg"
-          onClick={() => setScanModalOpen(true)}
-          disabled={processing}
-          className="gap-2 px-8"
-        >
-          {processing ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <ScanLine className="h-5 w-5" />
-          )}
-          {processing ? 'Processing…' : 'Scan QR Code'}
-        </Button>
-      </div>
-
-      {/* Last result */}
-      {lastResult && (
-        <div className={`rounded-xl border p-4 flex items-start gap-3 ${
-          lastResult.success
-            ? 'border-green-200 bg-green-50'
-            : 'border-red-200 bg-red-50'
-        }`}>
-          {lastResult.success ? (
-            <CheckCircle className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
-          ) : (
-            <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
-          )}
-          <div>
-            <p className={`font-semibold text-sm ${lastResult.success ? 'text-green-800' : 'text-red-800'}`}>
-              {lastResult.success ? 'Success' : 'Error'}
-            </p>
-            <p className={`text-sm mt-0.5 ${lastResult.success ? 'text-green-700' : 'text-red-700'}`}>
-              {lastResult.message}
-            </p>
-          </div>
-        </div>
+      {scanError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{scanError}</AlertDescription>
+        </Alert>
+      )}
+      {scanSuccess && (
+        <Alert className="border-green-200 bg-green-50 text-green-800">
+          <CheckCircle className="h-4 w-4" />
+          <AlertDescription>{scanSuccess}</AlertDescription>
+        </Alert>
       )}
 
-      {/* Eligible orders */}
-      <div className="rounded-xl border border-border bg-card card-shadow overflow-hidden">
-        <div className="px-5 py-3 border-b border-border flex items-center gap-2">
-          <Package className="h-4 w-4 text-primary" />
-          <h3 className="font-semibold text-sm text-foreground">
-            Eligible Orders ({eligibleOrders.length})
-          </h3>
-        </div>
-        {eligibleOrders.length === 0 ? (
-          <div className="px-5 py-8 text-center text-muted-foreground text-sm">
-            No orders eligible for scanning at this stage
-          </div>
-        ) : (
-          <div className="divide-y divide-border">
-            {eligibleOrders.slice(0, 10).map((order) => (
-              <div key={order.orderId} className="px-5 py-3 flex items-center justify-between">
-                <div>
-                  <p className="font-mono text-sm font-semibold text-foreground">{order.orderId}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Qty: {Number(order.quantity)} · ₹{order.rate.toFixed(2)}
-                  </p>
-                </div>
-                <StatusBadge status={order.status} size="sm" />
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <QrCode className="h-5 w-5 text-primary" />
+            Scan Order QR Code
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Point your camera at an order QR code to advance its workflow status.
+          </p>
+          <Button
+            onClick={() => {
+              setScanError(null);
+              setScanSuccess(null);
+              setScanModalOpen(true);
+            }}
+            disabled={isProcessing}
+            className="gap-2"
+          >
+            <QrCode className="h-4 w-4" />
+            {isProcessing ? 'Processing...' : 'Open Scanner'}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {lastScannedOrder && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              Last Scanned Order
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <span className="text-muted-foreground">Order ID:</span>
+                <p className="font-mono font-medium">{lastScannedOrder.orderId}</p>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+              <div>
+                <span className="text-muted-foreground">Status:</span>
+                <p className="font-medium">{lastScannedOrder.status}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Quantity:</span>
+                <p>{String(lastScannedOrder.quantity)}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Rate:</span>
+                <p>₹{lastScannedOrder.rate}</p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-3 gap-2"
+              onClick={() => refetch()}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh Orders
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <QRScanModal
         open={scanModalOpen}
         onClose={() => setScanModalOpen(false)}
         onScanned={handleScanned}
-        title={config.title}
-        description={config.subtitle}
+        title="Scan Order QR Code"
       />
     </div>
   );

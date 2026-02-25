@@ -5,11 +5,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { useAllOrders, useAllStores } from '@/hooks/useQueries';
-import { useAuth } from '@/contexts/AuthContext';
-import InvoiceView from './InvoiceView';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Store } from '@/backend';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle } from 'lucide-react';
+import InvoiceView from './InvoiceView';
+import { useAllOrders, useAllStores } from '../../hooks/useQueries';
+import { useAuth } from '../../contexts/AuthContext';
+import type { OrderRecord, Store } from '../../backend';
 
 interface InvoiceModalProps {
   orderId: string | null;
@@ -18,42 +20,72 @@ interface InvoiceModalProps {
 }
 
 export default function InvoiceModal({ orderId, open, onClose }: InvoiceModalProps) {
-  const { user } = useAuth();
-  const sessionEmail = user?.email ?? '';
+  const { sessionEmail } = useAuth();
 
-  const { data: orders, isLoading: ordersLoading } = useAllOrders(sessionEmail);
-  const { data: stores, isLoading: storesLoading } = useAllStores(sessionEmail);
+  const {
+    data: orders,
+    isLoading: ordersLoading,
+    error: ordersError,
+  } = useAllOrders(sessionEmail);
 
-  const order = orders?.find((o) => o.orderId === orderId);
+  const {
+    data: stores,
+    isLoading: storesLoading,
+    error: storesError,
+  } = useAllStores(sessionEmail);
 
-  // stores are indexed by Nat (1-based), storeId is bigint
-  const storeById: Store | null = (() => {
-    if (!order || !stores) return null;
-    const id = Number(order.storeId);
-    return stores[id - 1] ?? null;
-  })();
+  const order: OrderRecord | null = React.useMemo(() => {
+    if (!orders || !orderId) return null;
+    return orders.find((o) => o.orderId === orderId) ?? null;
+  }, [orders, orderId]);
+
+  const store: Store | null = React.useMemo(() => {
+    if (!stores || !order) return null;
+    const storeIdNum = Number(order.storeId);
+    // stores array is 0-indexed but storeId is 1-indexed
+    return stores[storeIdNum - 1] ?? stores.find((_, idx) => idx + 1 === storeIdNum) ?? null;
+  }, [stores, order]);
 
   const isLoading = ordersLoading || storesLoading;
+  const hasError = ordersError || storesError;
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto print:max-w-full print:max-h-full print:overflow-visible">
-        <DialogHeader className="print:hidden">
-          <DialogTitle>Invoice — {orderId}</DialogTitle>
+    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Invoice — {orderId ?? ''}</DialogTitle>
         </DialogHeader>
 
-        {isLoading ? (
+        {isLoading && (
           <div className="space-y-4 p-4">
-            <Skeleton className="h-20 w-full" />
-            <Skeleton className="h-40 w-full" />
-            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-32 w-full" />
+            <Skeleton className="h-4 w-1/2" />
           </div>
-        ) : order ? (
-          <InvoiceView order={order} store={storeById} />
-        ) : (
-          <div className="p-8 text-center text-muted-foreground">
-            Order not found.
-          </div>
+        )}
+
+        {!isLoading && hasError && (
+          <Alert variant="destructive" className="m-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Failed to load invoice data. Please close and try again.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {!isLoading && !hasError && !order && orderId && (
+          <Alert className="m-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Order <strong>{orderId}</strong> not found.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {!isLoading && !hasError && order && (
+          <InvoiceView order={order} store={store} />
         )}
       </DialogContent>
     </Dialog>

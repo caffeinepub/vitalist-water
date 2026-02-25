@@ -4,37 +4,47 @@
   "summary": "New project",
   "architectural_notes": [],
   "known_issues": [
-    "Page goes blank after deployment (reported in Version 17)"
+    "QR scan flow not going through",
+    "Invoice not generating",
+    "After assigning to delivery, order not showing in delivery panel"
   ],
   "isFixRequest": true,
   "existing_features": [
     {
-      "id": "feature-diagnose-and-fix-the-blank-page-issue-that-occurs-after-deployment-audit-app-tsx-for-runtime-errors-including-undefined-variable-access-failed-imports-missing-null-guards-on-authentication-state-and-role-based-routing-logic-that-may-throw-before-rendering-ensure-the-app-renders-a-visible-ui-for-all-authentication-states-unauthenticated-loading-authenticated-with-any-role",
-      "title": "Diagnose and fix the blank page issue that occurs after deployment. Audit App.tsx for runtime errors including undefined variable access, failed imports, missing null guards on authentication state, and role-based routing logic that may throw before rendering. Ensure the app renders a visible UI for all authentication states (unauthenticated, loading, authenticated with any role).",
+      "id": "feature-fix-invoice-generation-so-that-when-an-order-s-qr-code-is-scanned-or-when-the-invoice-modal-is-opened-the-invoice-is-correctly-fetched-and-rendered-with-all-order-details-store-info-line-items-and-the-qr-code-trace-the-full-call-path-from-invoicemodal-invoiceview-backend-queries-and-ensure-the-order-id-lookup-store-lookup-and-data-assembly-succeed-without-errors-add-defensive-null-undefined-checks-for-all-fields-rendered-in-invoiceview",
+      "title": "Fix invoice generation so that when an order's QR code is scanned or when the invoice modal is opened, the invoice is correctly fetched and rendered with all order details, store info, line items, and the QR code. Trace the full call path from InvoiceModal → InvoiceView → backend queries and ensure the order ID lookup, store lookup, and data assembly succeed without errors. Add defensive null/undefined checks for all fields rendered in InvoiceView.",
       "reqIds": [
         "REQ-1"
       ],
       "version": 1
     },
     {
-      "id": "feature-add-a-top-level-error-boundary-component-wrapping-the-entire-react-application-in-app-tsx-to-catch-and-display-any-unhandled-render-errors-with-a-user-friendly-fallback-ui-instead-of-a-blank-page-the-fallback-should-show-the-app-name-and-a-message-indicating-an-error-occurred-with-a-reload-button",
-      "title": "Add a top-level error boundary component wrapping the entire React application in App.tsx to catch and display any unhandled render errors with a user-friendly fallback UI instead of a blank page. The fallback should show the app name and a message indicating an error occurred with a reload button.",
+      "id": "feature-fix-the-delivery-assignment-flow-so-that-after-an-admin-assigns-an-order-to-a-delivery-user-sets-assigneddeliveryuser-on-the-order-that-order-immediately-appears-in-the-deliverydashboard-for-the-assigned-delivery-user-audit-the-backend-assignorder-updateorder-logic-to-confirm-assigneddeliveryuser-is-persisted-correctly-audit-usequeries-ts-to-confirm-the-delivery-dashboard-query-filters-orders-by-the-logged-in-user-s-principal-id-against-assigneddeliveryuser-fix-any-mismatch-between-how-the-assignment-is-stored-and-how-it-is-queried",
+      "title": "Fix the delivery assignment flow so that after an admin assigns an order to a delivery user (sets assignedDeliveryUser on the order), that order immediately appears in the DeliveryDashboard for the assigned delivery user. Audit the backend assignOrder / updateOrder logic to confirm assignedDeliveryUser is persisted correctly. Audit useQueries.ts to confirm the delivery dashboard query filters orders by the logged-in user's principal/ID against assignedDeliveryUser. Fix any mismatch between how the assignment is stored and how it is queried.",
       "reqIds": [
         "REQ-2"
       ],
       "version": 1
     },
     {
-      "id": "feature-audit-all-lazy-loaded-or-dynamically-imported-components-maps-leaflet-qr-scanner-camera-for-missing-suspense-boundaries-or-import-failures-that-could-cause-a-blank-render-wrap-all-such-components-with-react-suspense-and-appropriate-loading-fallbacks",
-      "title": "Audit all lazy-loaded or dynamically imported components (maps, Leaflet, QR scanner, camera) for missing Suspense boundaries or import failures that could cause a blank render. Wrap all such components with React.Suspense and appropriate loading fallbacks.",
+      "id": "feature-fix-the-end-to-end-qr-scan-flow-across-all-role-based-pipeline-stages-admin-staff-delivery-in-scanpage-and-deliverydashboard-ensure-that-1-the-qrscanmodal-camera-activates-reliably-2-the-scanned-value-is-correctly-decoded-using-the-vitalist-prefix-logic-in-qrgenerator-ts-orderutils-ts-3-the-decoded-order-id-is-matched-to-a-real-order-in-the-backend-and-4-the-appropriate-status-transition-mutation-is-called-and-confirmed-handle-cases-where-the-scanned-qr-value-does-not-match-any-order-by-showing-a-clear-error-message",
+      "title": "Fix the end-to-end QR scan flow across all role-based pipeline stages (admin, staff, delivery) in ScanPage and DeliveryDashboard. Ensure that: (1) the QRScanModal camera activates reliably, (2) the scanned value is correctly decoded using the VITALIST-prefix logic in qrGenerator.ts / orderUtils.ts, (3) the decoded order ID is matched to a real order in the backend, and (4) the appropriate status transition mutation is called and confirmed. Handle cases where the scanned QR value does not match any order by showing a clear error message.",
       "reqIds": [
         "REQ-3"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-audit-and-fix-the-qrprintview-and-qrcodedisplay-components-to-ensure-the-qr-code-image-url-is-generated-correctly-using-qrgenerator-ts-with-the-vitalist-prefixed-base64-encoded-order-id-and-that-the-image-loads-without-cors-or-url-encoding-errors-verify-the-qr-code-printed-displayed-encodes-exactly-the-value-the-scan-decoder-expects",
+      "title": "Audit and fix the QRPrintView and QRCodeDisplay components to ensure the QR code image URL is generated correctly using qrGenerator.ts (with the VITALIST-prefixed, base64-encoded order ID) and that the image loads without CORS or URL encoding errors. Verify the QR code printed/displayed encodes exactly the value the scan decoder expects.",
+      "reqIds": [
+        "REQ-4"
       ],
       "version": 1
     }
   ],
   "new_feature_requests": [],
-  "projectName": "Fix blank page crash after deployment",
+  "projectName": "Vitalist Water",
   "clarification_mode": "instant",
   "clarification_rounds": 0
 }

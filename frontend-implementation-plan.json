@@ -1,146 +1,133 @@
 {
   "kind": "implementation_plan",
   "version": "1.0",
-  "title": "Fix blank page crash after deployment",
+  "title": "Fix QR flow: invoice generation and delivery panel assignment issues",
   "requirements": [
     {
       "id": "REQ-1",
-      "summary": "Diagnose and fix the blank page issue by auditing App.tsx for runtime errors, missing null guards on authentication state, and role-based routing logic. Ensure the app renders a visible UI for all authentication states.",
+      "summary": "Fix invoice generation to correctly fetch and render order details, store info, line items, and QR code with defensive null checks",
       "acceptanceCriteria": [
-        "The app loads and displays the login page or dashboard without going blank after a fresh deployment",
-        "No unhandled JavaScript exceptions are thrown during initial render",
-        "All role-based routes (admin, staff, delivery, distributor) render without blank screens",
-        "Unauthenticated users see the login page instead of a blank screen",
-        "The app recovers gracefully if backend actor initialization is slow or fails"
+        "Opening the invoice modal for any order displays the fully rendered invoice with order details, store info, and QR code.",
+        "No console errors or blank states appear when the invoice modal is opened.",
+        "If order or store data is momentarily loading, a skeleton/loading state is shown rather than a crash or empty render.",
+        "The print button in InvoiceView functions correctly."
       ],
       "file_operations": [
         {
-          "path": "frontend/src/App.tsx",
+          "path": "frontend/src/components/orders/InvoiceModal.tsx",
           "operation": "modify",
-          "description": "Add defensive null guards on all authentication state accesses (user, token, role checks). Ensure role-based routing logic explicitly handles undefined/null user states with fallback to LoginPage. Add loading states for actor initialization. Verify that the component returns valid JSX in all code paths (authenticated, unauthenticated, loading, error). Replace any implicit undefined returns with explicit loading or fallback UI."
+          "description": "Add comprehensive error handling and loading states for order and store data fetching. Ensure the component gracefully handles null/undefined values and displays loading skeletons while data is being retrieved. Add error boundaries for failed data fetches and retry mechanisms."
         },
         {
-          "path": "frontend/src/contexts/AuthContext.tsx",
+          "path": "frontend/src/components/orders/InvoiceView.tsx",
           "operation": "modify",
-          "description": "Add defensive checks to prevent AuthContext from returning undefined user/token values that could cause downstream blank renders. Ensure sessionStorage access is wrapped in try-catch to handle corrupted or missing session data gracefully. Add a loading state to AuthContext that components can check before attempting to render role-dependent content."
+          "description": "Add defensive null/undefined checks for all rendered fields (order details, store info, line items, QR code). Implement fallback values for missing data. Ensure the QR code image URL is correctly generated and rendered. Verify print button functionality and add error handling for print failures."
         },
         {
-          "path": "frontend/src/pages/LoginPage.tsx",
+          "path": "frontend/src/hooks/useQueries.ts",
           "operation": "modify",
-          "description": "Add null guards for authentication hooks and ensure the component renders a visible login form even if Internet Identity or actor is initializing. Prevent blank renders during authentication state transitions."
-        },
-        {
-          "path": "frontend/src/pages/Dashboard.tsx",
-          "operation": "modify",
-          "description": "Add defensive null checks on query results and authentication state. Ensure the component displays loading skeletons or fallback UI instead of returning undefined when data is pending or missing."
-        },
-        {
-          "path": "frontend/src/pages/admin/OrderManagementPage.tsx",
-          "operation": "modify",
-          "description": "Add null guards on orders query and authentication state. Ensure the component returns valid JSX in all states (loading, error, empty data)."
-        },
-        {
-          "path": "frontend/src/pages/admin/StoreManagementPage.tsx",
-          "operation": "modify",
-          "description": "Add null guards on stores query and authentication state. Ensure the component returns valid JSX in all states."
-        },
-        {
-          "path": "frontend/src/pages/admin/UserManagementPage.tsx",
-          "operation": "modify",
-          "description": "Add null guards on users query and authentication state. Ensure the component returns valid JSX in all states."
-        },
-        {
-          "path": "frontend/src/pages/staff/OrderCreationPage.tsx",
-          "operation": "modify",
-          "description": "Add null guards on orders and stores queries. Ensure the component returns valid JSX in all states."
-        },
-        {
-          "path": "frontend/src/pages/delivery/DeliveryDashboard.tsx",
-          "operation": "modify",
-          "description": "Add null guards on orders query and authentication state. Ensure the component returns valid JSX in all states."
-        },
-        {
-          "path": "frontend/src/pages/distributor/DistributorDashboard.tsx",
-          "operation": "modify",
-          "description": "Add null guards on deliveries query and authentication state. Ensure the component returns valid JSX in all states."
+          "description": "Review and fix the order and store query hooks to ensure proper data fetching, error handling, and refetch logic. Verify that the getOrder and getAllStores queries return complete data structures with all required fields for invoice rendering."
         }
       ]
     },
     {
       "id": "REQ-2",
-      "summary": "Add a top-level error boundary component wrapping the entire React application in App.tsx to catch and display any unhandled render errors with a user-friendly fallback UI instead of a blank page.",
+      "summary": "Fix delivery assignment flow so assigned orders immediately appear in the DeliveryDashboard for the assigned delivery user",
       "acceptanceCriteria": [
-        "A React ErrorBoundary component wraps the top-level app content",
-        "When a render error is caught, a fallback UI is displayed instead of a blank page",
-        "The fallback UI includes a reload/retry button",
-        "The error boundary does not interfere with normal app rendering"
+        "After an admin assigns an order to a delivery user, that order appears in the delivery user's DeliveryDashboard without requiring a page reload beyond normal React Query refetch.",
+        "The delivery dashboard only shows orders assigned to the currently logged-in delivery user.",
+        "Orders with statuses 'Dispatched' and 'Out for Delivery' are visible to the assigned delivery user.",
+        "No orders from other delivery users are shown in the panel."
       ],
       "file_operations": [
         {
-          "path": "frontend/src/components/ErrorBoundary.tsx",
-          "operation": "create",
-          "description": "Create a React class-based ErrorBoundary component with componentDidCatch lifecycle method to capture render errors. Implement a fallback UI that displays the app name 'Vitalist Water — Order & Delivery Management', an error message stating 'An unexpected error occurred', and a reload button that calls window.location.reload(). Include error logging to console for debugging. Export the component as default."
+          "path": "frontend/src/pages/delivery/DeliveryDashboard.tsx",
+          "operation": "modify",
+          "description": "Audit and fix the order filtering logic to correctly match the logged-in delivery user's principal/ID against the order's assignedDeliveryUser field. Ensure the query filters orders by status ('Dispatched', 'Out for Delivery') and assignedDeliveryUser. Add automatic refetch on order assignment mutations. Add debugging logs to verify the principal comparison logic."
         },
         {
-          "path": "frontend/src/App.tsx",
+          "path": "frontend/src/hooks/useQueries.ts",
           "operation": "modify",
-          "description": "Import the ErrorBoundary component and wrap the entire app content (role-based routing and layout components) inside <ErrorBoundary>. Ensure the ErrorBoundary is placed immediately inside the root component return statement, above all authentication and routing logic."
+          "description": "Review and fix the useGetAssignedOrdersForDeliveryUser hook to ensure it correctly filters orders by the logged-in user's principal. Verify the principal comparison logic matches how assignedDeliveryUser is stored in the backend. Add proper React Query cache invalidation on order assignment mutations."
+        },
+        {
+          "path": "frontend/src/pages/admin/OrderManagementPage.tsx",
+          "operation": "modify",
+          "description": "Ensure that after assigning an order to a delivery user via the assignDelivery mutation, the relevant React Query caches are invalidated (both the admin's order list and the delivery user's assigned orders). Add success notifications and refetch triggers."
         }
       ]
     },
     {
       "id": "REQ-3",
-      "summary": "Audit all lazy-loaded or dynamically imported components (maps, Leaflet, QR scanner, camera) for missing Suspense boundaries or import failures that could cause a blank render. Wrap all such components with React.Suspense and appropriate loading fallbacks.",
+      "summary": "Fix end-to-end QR scan flow across all role-based pipeline stages with reliable camera activation, correct QR decoding, order matching, and status transitions",
       "acceptanceCriteria": [
-        "All dynamically imported components (SatelliteMapView, QRScanModal, BarcodeScanStep) have Suspense boundaries with loading indicators",
-        "A failure to load a dynamic component does not blank out the entire page",
-        "Loading states are visible while async components initialize"
+        "Scanning a valid order QR code in any role-based scan flow (admin, staff, delivery) correctly identifies the order and triggers the status update.",
+        "The camera activates without errors when the QR scan modal is opened.",
+        "A successfully scanned and processed QR code shows a success confirmation to the user.",
+        "Scanning an unrecognized or malformed QR code shows a user-friendly error message instead of crashing.",
+        "The DistributorWorkflowDialog barcode scan step also correctly resolves the scanned order and proceeds to the image upload step."
       ],
       "file_operations": [
         {
-          "path": "frontend/src/components/map/SatelliteMapView.tsx",
-          "operation": "modify",
-          "description": "Audit the Leaflet CDN loading logic. Ensure the component returns valid JSX (a loading spinner or skeleton) while Leaflet scripts are being loaded. Add error handling for failed CDN loads and display a fallback message instead of causing a blank render. Verify the component never returns undefined or null without a fallback UI."
-        },
-        {
           "path": "frontend/src/components/qr/QRScanModal.tsx",
           "operation": "modify",
-          "description": "Verify the component uses camera/useCamera correctly. Ensure camera hook initialization errors are caught and displayed in the UI instead of causing a blank page. Add explicit loading states while the camera is initializing. Verify the component returns valid JSX in all states (supported, not-supported, error, loading)."
-        },
-        {
-          "path": "frontend/src/components/distributor/BarcodeScanStep.tsx",
-          "operation": "modify",
-          "description": "Verify the component uses qr-code/useQRScanner correctly. Ensure QR scanner hook errors and initialization states are properly handled with visible fallback UI. Add explicit loading states while jsQR library is loading. Verify the component returns valid JSX in all states."
-        },
-        {
-          "path": "frontend/src/pages/admin/LiveTrackingPage.tsx",
-          "operation": "modify",
-          "description": "Wrap the SatelliteMapView component usage with React.Suspense and provide a loading fallback (e.g., a spinner or 'Loading map...' message). Ensure query error states display a fallback UI instead of causing a blank render."
-        },
-        {
-          "path": "frontend/src/pages/admin/StoreManagementPage.tsx",
-          "operation": "modify",
-          "description": "Wrap the SatelliteMapView component usage with React.Suspense and provide a loading fallback. Ensure query error states display a fallback UI."
-        },
-        {
-          "path": "frontend/src/pages/admin/DeliveryVerificationPage.tsx",
-          "operation": "modify",
-          "description": "Wrap the SatelliteMapView component usage with React.Suspense and provide a loading fallback. Ensure query error states display a fallback UI."
-        },
-        {
-          "path": "frontend/src/pages/delivery/DeliveryDashboard.tsx",
-          "operation": "modify",
-          "description": "Wrap the QRScanModal component usage with React.Suspense and provide a loading fallback. Ensure the component handles QR scanner initialization errors gracefully."
-        },
-        {
-          "path": "frontend/src/pages/staff/OrderCreationPage.tsx",
-          "operation": "modify",
-          "description": "Wrap the QRScanModal component usage with React.Suspense and provide a loading fallback."
+          "description": "Use the qr-code/useQRScanner component to implement reliable QR scanning. Verify the component's usage instructions before implementing. Ensure the camera activates reliably when the modal opens, handle camera permission errors gracefully, and display user-friendly error messages. Add proper cleanup on modal close."
         },
         {
           "path": "frontend/src/pages/ScanPage.tsx",
           "operation": "modify",
-          "description": "Wrap the QRScanModal component usage with React.Suspense and provide a loading fallback. Ensure the component handles QR scanner initialization errors gracefully."
+          "description": "Fix the QR scan flow for all three role-based pipeline stages (admin, staff, delivery). Ensure scanned QR values are correctly decoded using the VITALIST-prefix logic from frontend/src/utils/orderUtils.ts and frontend/src/utils/qrGenerator.ts. Verify the decoded order ID is matched to a real order in the backend before calling the status transition mutation. Add comprehensive error handling for unrecognized/malformed QR codes with clear user feedback. Add success confirmations after successful scans."
+        },
+        {
+          "path": "frontend/src/pages/delivery/DeliveryDashboard.tsx",
+          "operation": "modify",
+          "description": "Fix the QR scan flow in the delivery dashboard to correctly decode scanned QR values, match them to orders, and trigger status updates. Ensure the GPS location capture works correctly after successful scans. Add error handling for scan failures and order lookup failures."
+        },
+        {
+          "path": "frontend/src/components/distributor/BarcodeScanStep.tsx",
+          "operation": "modify",
+          "description": "Use the qr-code/useQRScanner component to implement barcode/QR scanning in the distributor workflow. Verify the component's usage instructions before implementing. Ensure scanned values are correctly decoded and matched to orders. Add error handling for unrecognized scans."
+        },
+        {
+          "path": "frontend/src/utils/orderUtils.ts",
+          "operation": "modify",
+          "description": "Review and fix the QR encode/decode utilities to ensure they correctly handle the VITALIST-prefix and base64 encoding/decoding. Add comprehensive error handling for malformed QR values. Ensure the decode function returns null for invalid inputs rather than throwing errors."
+        },
+        {
+          "path": "frontend/src/components/distributor/DistributorWorkflowDialog.tsx",
+          "operation": "modify",
+          "description": "Ensure the barcode scan step correctly resolves the scanned order ID and proceeds to the image upload step. Add error handling for failed order lookups and display clear error messages to the user."
+        }
+      ]
+    },
+    {
+      "id": "REQ-4",
+      "summary": "Fix QR code image generation and display to ensure QR codes load without errors and encode the correct value for scan decoding",
+      "acceptanceCriteria": [
+        "QR codes displayed in QRCodeDisplay and QRPrintView load successfully as images.",
+        "The encoded value in the QR image matches the format expected by the scan decoder (VITALIST prefix + base64 order ID).",
+        "Scanning a printed/displayed QR code resolves to the correct order in the backend."
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/components/qr/QRCodeDisplay.tsx",
+          "operation": "modify",
+          "description": "Fix the QR code image URL generation using the generateQRCodeURL function from frontend/src/utils/qrGenerator.ts. Ensure the URL is correctly formatted and handles URL encoding properly. Add error handling for image load failures and display a fallback (e.g., the raw order ID text). Verify the encoded value matches the VITALIST-prefix + base64 format expected by the scan decoder."
+        },
+        {
+          "path": "frontend/src/components/orders/QRPrintView.tsx",
+          "operation": "modify",
+          "description": "Fix the QR code image URL generation and loading. Ensure the image loads without CORS or URL encoding errors. Add error handling and fallback display for failed image loads. Verify the print functionality works correctly."
+        },
+        {
+          "path": "frontend/src/utils/qrGenerator.ts",
+          "operation": "modify",
+          "description": "Review and fix the QR code generation functions to ensure they correctly encode the VITALIST-prefixed, base64-encoded order ID. Verify the URL encoding is correct and the generated image URL is valid. Ensure the encoded value is exactly what the scan decoder expects (matching the decode logic in frontend/src/utils/orderUtils.ts)."
+        },
+        {
+          "path": "frontend/src/components/orders/InvoiceView.tsx",
+          "operation": "modify",
+          "description": "Ensure the QR code is correctly rendered in the invoice using QRCodeDisplay component. Verify the order ID is passed correctly and the QR code image loads without errors."
         }
       ]
     }
